@@ -347,7 +347,7 @@
           <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Master_data.py — Data Preparation</h4><p>Aggregates raw SKU-level scanner data to PPG level. Creates two versions: one with Promo Flag (used for base price derivation) and one without (used for modelling and competition mapping).</p></div></div>
           <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Feature Engineering.py — Variable Creation</h4><p>Derives all model inputs: Base Price, TPR (discount depth), WTD (distribution), Seasonality Index, Time Trend, Stockpiling, Downsizing, OOS Ratio/Recovery, and promotional event flags (Lucky Draws, GWP, PWP).</p></div></div>
           <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Competition.py — Competitor Mapping</h4><p>For each PPG, identifies which other PPGs are "competitors" based on three rules: Beer Segment interaction, ABV Classification interaction, and Pack Size × Pack Count interaction. Outputs a binary competitor matrix.</p></div></div>
-          <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Modeling.py — Gradient Descent Algorithm (GDA)</h4><p>Runs a constrained gradient descent (100 iterations) to estimate elasticity coefficients for each PPG. Variables include own price, distribution, TPR, competition price/distribution, seasonality, stockpiling, OOS, and event flags. Also calculates Base vs Incremental Sales.</p></div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Modeling.py — OLS → GDA Two-Step Process</h4><p><strong>Step 1 — OLS:</strong> Ordinary Least Squares is run first (unconstrained) to generate initial coefficient estimates ("priors") per PPG, stored in <code>ModelEQ.xlsx</code> (columns: <code>Prior</code>, <code>SD</code>). <br/><strong>Step 2 — GDA:</strong> Reads OLS priors from ModelEQ.xlsx and runs 100 constrained gradient descent iterations to refine them within economic bounds. Also calculates Base vs Incremental Sales.</p></div></div>
           <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Volume_Transferability.py — Post-Modelling Analysis</h4><p>Uses modelling outputs to build Power BI-ready files: own elasticities, cross-price elasticities, cross-distribution elasticities, and volume transferability matrices (brand-brand &amp; internal-external).</p></div></div>
         </div>
       </div>
@@ -642,11 +642,13 @@
       <div class="concept-card">
         <div class="concept-header" onclick="toggleConcept(this)">
           <span class="concept-icon">🤖</span>
-          <div><div class="concept-title">Gradient Descent Algorithm (GDA)</div><div class="concept-subtitle">How the model estimates elasticities</div></div>
+          <div><div class="concept-title">OLS → GDA Two-Step Modelling</div><div class="concept-subtitle">How the model estimates elasticities</div></div>
           <span class="concept-arrow">▶</span>
         </div>
         <div class="concept-body">
-          Instead of a standard OLS regression, a <strong>custom constrained gradient descent</strong> is used. This allows:<br/>
+          Modelling uses a two-step process:<br/>
+          <strong>Step 1 — OLS (Ordinary Least Squares):</strong> Run first, unconstrained, to generate initial coefficient estimates ("priors") saved in ModelEQ.xlsx. OLS gives a data-driven starting point but can produce economically invalid signs.<br/><br/>
+          <strong>Step 2 — GDA (Gradient Descent Algorithm):</strong> Reads OLS priors and refines them over 100 iterations with full economic constraints. Instead of a plain regression, this custom approach allows:<br/>
           <ul style="margin:8px 0 8px 20px;">
             <li>Enforcing economic sign constraints (e.g., own price must be negative)</li>
             <li>Incorporating prior beliefs (from OLS estimates as starting points)</li>
@@ -1024,6 +1026,56 @@ final_stockpiling = argmin(correlation(StockPiling_j, Total Units))</code></pre>
       <div class="io-row">
         <div class="io-box io-in"><h5>📥 Key Inputs</h5><p><strong>Feature Eng Output</strong> (model variables) · <strong>ModelEQ.xlsx</strong> (list of variables per PPG + OLS priors + SD) · Competition matrix · Shares data</p></div>
         <div class="io-box io-out"><h5>📤 Outputs</h5><p><strong>GDA Coefficients</strong> (final elasticities per PPG) · <strong>Base vs Incremental</strong> (weekly sales decomposition) · <strong>R² and MAPE</strong> per PPG</p></div>
+      </div>
+
+      <div class="card" style="border-left: 4px solid #1a56db;">
+        <h2>Step 1 of 2: OLS — Generating Initial Priors</h2>
+        <span class="tag tag-blue">Runs before GDA</span>
+        <p style="margin-top:12px;">Before the custom Gradient Descent runs, an <strong>Ordinary Least Squares (OLS) regression</strong> is run for each PPG. OLS is a standard statistical regression that finds the best-fit line by minimising the sum of squared errors — with <em>no constraints</em> on the coefficient signs or magnitudes.</p>
+        <p style="margin-top:10px;">The purpose is to generate <strong>data-driven starting points</strong> (called "priors") for the GDA. Rather than starting GDA from scratch, it begins from a position that already has a rough understanding of the relationships in the data, which makes convergence faster and more reliable.</p>
+
+        <div class="grid-2" style="margin-top:14px;">
+          <div class="mini-card">
+            <h4>What OLS produces</h4>
+            <ul style="padding-left:18px; font-size:13px; line-height:1.8;">
+              <li><strong>Coefficient estimate</strong> per variable → saved as <code>Prior</code> column</li>
+              <li><strong>Standard deviation</strong> of each estimate → saved as <code>SD</code> column</li>
+              <li>Stored in <code>ModelEQ.xlsx</code>, one row per PPG × Variable</li>
+            </ul>
+          </div>
+          <div class="mini-card">
+            <h4>Why OLS alone is insufficient</h4>
+            <ul style="padding-left:18px; font-size:13px; line-height:1.8;">
+              <li>OLS is <strong>unconstrained</strong> — it can produce a positive own-price elasticity (economically wrong)</li>
+              <li>OLS does not handle <strong>multicollinearity</strong> between correlated promotions well</li>
+              <li>OLS cannot enforce <strong>business rules</strong> (e.g., CCF bounds on cross-elasticities)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <p><strong>ModelEQ.xlsx structure (OLS output):</strong></p>
+          <table style="margin-top:8px;">
+            <tr><th>Column</th><th>Description</th><th>Used in GDA as</th></tr>
+            <tr><td><code>Channel</code></td><td>CVS or SMKT</td><td>Filter to run correct channel</td></tr>
+            <tr><td><code>PPG</code></td><td>PPG identifier</td><td>Loop key for GDA</td></tr>
+            <tr><td><code>Variable</code></td><td>Model variable name (e.g., LN_Base_Units_Price)</td><td>Controls which variables to include per PPG</td></tr>
+            <tr><td><code>Prior</code></td><td><strong>OLS coefficient estimate</strong></td><td>Starting coefficient value for GDA iteration 0</td></tr>
+            <tr><td><code>SD</code></td><td>Standard deviation of OLS estimate</td><td>Stored in output for reference; referenced as <code>Initial_Prior_from_OLS</code></td></tr>
+          </table>
+        </div>
+
+        <div class="alert alert-blue" style="margin-top:14px;">
+          <strong>Two-step modelling process:</strong><br/>
+          <strong>Step 1 — OLS</strong>: Unconstrained regression → generates <code>Prior</code> &amp; <code>SD</code> → saved to <code>ModelEQ.xlsx</code><br/>
+          <strong>Step 2 — GDA</strong>: Reads ModelEQ.xlsx, uses OLS priors as iteration-0 starting point, then runs 100 constrained gradient descent iterations to enforce economic sign &amp; magnitude bounds.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Step 2 of 2: GDA — Constrained Refinement</h2>
+        <span class="tag tag-amber">100 iterations per PPG</span>
+        <p style="margin-top:12px;">The GDA takes the OLS priors from ModelEQ.xlsx and refines them over 100 iterations, enforcing all economic constraints. Each iteration computes predicted sales, measures error, correlates error with each variable, and nudges the coefficients in the right direction — all within the allowed bounds.</p>
       </div>
 
       <div class="card">
