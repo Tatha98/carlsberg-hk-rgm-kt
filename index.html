@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carlsberg HK — RGM Modelling | Knowledge Transfer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --sidebar-w: 270px;
+      --brand: #c8102e;
+      --brand-light: #f9e8eb;
+      --accent: #1a56db;
+      --dark: #111827;
+      --mid: #374151;
+      --muted: #6b7280;
+      --light: #f9fafb;
+      --border: #e5e7eb;
+      --code-bg: #1e2535;
+      --tag-green: #dcfce7;
+      --tag-green-text: #166534;
+      --tag-blue: #dbeafe;
+      --tag-blue-text: #1e40af;
+      --tag-amber: #fef3c7;
+      --tag-amber-text: #92400e;
+      --tag-purple: #ede9fe;
+      --tag-purple-text: #5b21b6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: var(--mid); line-height: 1.6; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; left: 0; top: 0; width: var(--sidebar-w);
+      height: 100vh; background: var(--dark); overflow-y: auto;
+      display: flex; flex-direction: column; z-index: 100;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid #374151;
+    }
+    .sidebar-logo .client { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--brand); text-transform: uppercase; margin-bottom: 4px; }
+    .sidebar-logo .title { font-size: 14px; font-weight: 700; color: #f9fafb; line-height: 1.3; }
+    .sidebar-logo .sub { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .nav-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 700; color: #6b7280; letter-spacing: 1.5px; text-transform: uppercase; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px; margin: 1px 0; border-radius: 6px;
+      cursor: pointer; font-size: 13px; color: #d1d5db;
+      transition: all 0.15s;
+    }
+    .nav-item:hover { background: #1f2937; color: #f9fafb; }
+    .nav-item.active { background: #1e3a5f; color: #60a5fa; font-weight: 600; }
+    .nav-item .icon { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto; font-size: 10px; padding: 1px 7px;
+      border-radius: 12px; background: #374151; color: #9ca3af; font-weight: 600;
+    }
+
+    /* ── Main ── */
+    .main { margin-left: var(--sidebar-w); min-height: 100vh; }
+    .topbar {
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 14px 40px; display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .topbar .page-title { font-size: 16px; font-weight: 700; color: var(--dark); }
+    .topbar .breadcrumb { font-size: 12px; color: var(--muted); }
+    .content { padding: 32px 40px 80px; max-width: 1100px; }
+
+    /* ── Section ── */
+    .section { display: none; }
+    .section.active { display: block; }
+    .section-header { margin-bottom: 28px; }
+    .section-header h1 { font-size: 26px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+    .section-header p { font-size: 15px; color: var(--muted); max-width: 700px; line-height: 1.6; }
+
+    /* ── Cards ── */
+    .card {
+      background: white; border-radius: 12px; padding: 24px;
+      margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
+    }
+    .card h2 { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .card h3 { font-size: 14px; font-weight: 600; color: var(--mid); margin: 16px 0 8px; }
+    .card p, .card li { font-size: 14px; color: var(--mid); line-height: 1.7; }
+    .card ul, .card ol { padding-left: 20px; }
+    .card li { margin-bottom: 4px; }
+
+    /* ── Tags ── */
+    .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 12px; margin: 2px; }
+    .tag-green  { background: var(--tag-green);  color: var(--tag-green-text); }
+    .tag-blue   { background: var(--tag-blue);   color: var(--tag-blue-text); }
+    .tag-amber  { background: var(--tag-amber);  color: var(--tag-amber-text); }
+    .tag-purple { background: var(--tag-purple); color: var(--tag-purple-text); }
+    .tag-red    { background: #fee2e2; color: #991b1b; }
+
+    /* ── Code ── */
+    pre {
+      background: var(--code-bg); color: #e2e8f0; border-radius: 10px;
+      padding: 18px 20px; font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px; line-height: 1.7; overflow-x: auto; margin: 12px 0;
+    }
+    code {
+      font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+      background: #f1f5f9; color: #c7254e; padding: 1px 6px; border-radius: 4px;
+    }
+    pre code { background: none; color: #e2e8f0; padding: 0; }
+    .comment { color: #718096; }
+    .keyword { color: #63b3ed; }
+    .string  { color: #68d391; }
+    .func    { color: #fbd38d; }
+    .var     { color: #fc8181; }
+
+    /* ── Step blocks ── */
+    .steps { counter-reset: steps; }
+    .step {
+      display: flex; gap: 16px; margin-bottom: 20px; padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; margin-bottom: 0; }
+    .step-num {
+      width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
+      color: white; font-size: 13px; font-weight: 700; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; margin-top: 2px;
+    }
+    .step-content h4 { font-size: 14px; font-weight: 700; color: var(--dark); margin-bottom: 5px; }
+    .step-content p { font-size: 13.5px; color: var(--mid); line-height: 1.65; }
+
+    /* ── Grid ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* ── Mini cards ── */
+    .mini-card {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .mini-card h4 { font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+    .mini-card p { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Alert boxes ── */
+    .alert {
+      border-radius: 8px; padding: 14px 18px; margin: 12px 0;
+      font-size: 13.5px; border-left: 4px solid;
+    }
+    .alert-blue   { background: #eff6ff; border-color: #3b82f6; color: #1e40af; }
+    .alert-green  { background: #f0fdf4; border-color: #22c55e; color: #166534; }
+    .alert-amber  { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
+
+    /* ── Architecture SVG card ── */
+    .arch-container { overflow-x: auto; padding: 10px 0; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8fafc; font-weight: 600; color: var(--dark); padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--border); }
+    td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    tr:hover td { background: #fafbff; }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+    /* ── File header band ── */
+    .file-band {
+      background: linear-gradient(135deg, #1e3a5f, #1a56db);
+      border-radius: 12px; padding: 22px 28px; margin-bottom: 20px;
+      color: white;
+    }
+    .file-band .fname { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-bottom: 4px; }
+    .file-band .fdesc { font-size: 13.5px; opacity: 0.85; }
+    .file-band .fmeta { margin-top: 12px; display: flex; gap: 20px; flex-wrap: wrap; }
+    .file-band .fmeta-item { font-size: 12px; opacity: 0.8; }
+    .file-band .fmeta-item strong { opacity: 1; }
+
+    /* ── IO boxes ── */
+    .io-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .io-box { flex: 1; min-width: 200px; border-radius: 8px; padding: 12px 14px; }
+    .io-in { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .io-out { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .io-box h5 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+    .io-in h5 { color: #166534; }
+    .io-out h5 { color: #1e40af; }
+    .io-box p { font-size: 12.5px; color: var(--mid); }
+
+    /* ── Concept card ── */
+    .concept-card {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; margin-bottom: 14px;
+    }
+    .concept-header {
+      padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+      cursor: pointer; background: #fafbff; border-bottom: 1px solid transparent;
+      transition: background 0.15s;
+    }
+    .concept-header:hover { background: #f0f4ff; }
+    .concept-header.open { border-bottom-color: var(--border); }
+    .concept-icon { font-size: 20px; width: 32px; text-align: center; }
+    .concept-title { font-size: 14px; font-weight: 700; color: var(--dark); }
+    .concept-subtitle { font-size: 12px; color: var(--muted); }
+    .concept-arrow { margin-left: auto; color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+    .concept-header.open .concept-arrow { transform: rotate(90deg); }
+    .concept-body { padding: 16px 18px; display: none; font-size: 13.5px; color: var(--mid); line-height: 1.7; }
+    .concept-body.open { display: block; }
+    .concept-formula {
+      background: var(--code-bg); color: #fbd38d; border-radius: 8px;
+      padding: 10px 16px; font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; margin: 10px 0;
+    }
+
+    /* ── Glossary ── */
+    .glos-row { display: flex; gap: 10px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+    .glos-var { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--accent); min-width: 260px; flex-shrink: 0; }
+    .glos-desc { font-size: 13px; color: var(--mid); }
+
+    /* scroll-margin for anchor links */
+    [id] { scroll-margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ SIDEBAR ════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="client">Carlsberg HK · Fractal Analytics</div>
+    <div class="title">Revenue Growth Management</div>
+    <div class="sub">Modelling KT Resource · 2024</div>
+  </div>
+
+  <div class="nav-section">Project</div>
+  <div class="nav-item active" onclick="show('overview', this)">
+    <span class="icon">🏠</span> Overview
+  </div>
+  <div class="nav-item" onclick="show('architecture', this)">
+    <span class="icon">🗺️</span> Architecture Flow
+  </div>
+  <div class="nav-item" onclick="show('concepts', this)">
+    <span class="icon">💡</span> Key Concepts
+  </div>
+
+  <div class="nav-section">Code Walkthrough</div>
+  <div class="nav-item" onclick="show('master', this)">
+    <span class="icon">📦</span> Master Data
+    <span class="nav-badge">1</span>
+  </div>
+  <div class="nav-item" onclick="show('features', this)">
+    <span class="icon">⚙️</span> Feature Engineering
+    <span class="nav-badge">2</span>
+  </div>
+  <div class="nav-item" onclick="show('competition', this)">
+    <span class="icon">🏆</span> Competition
+    <span class="nav-badge">3</span>
+  </div>
+  <div class="nav-item" onclick="show('modeling', this)">
+    <span class="icon">📊</span> Modelling (GDA)
+    <span class="nav-badge">4</span>
+  </div>
+  <div class="nav-item" onclick="show('transferability', this)">
+    <span class="icon">🔄</span> Vol. Transferability
+    <span class="nav-badge">5</span>
+  </div>
+
+  <div class="nav-section">Reference</div>
+  <div class="nav-item" onclick="show('glossary', this)">
+    <span class="icon">📖</span> Variable Glossary
+  </div>
+  <div class="nav-item" onclick="show('outputs', this)">
+    <span class="icon">📁</span> Outputs Guide
+  </div>
+</nav>
+
+<!-- ════════════════ MAIN ════════════════ -->
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="breadcrumb">Carlsberg HK · RGM</div>
+      <div class="page-title" id="topbar-title">Project Overview</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ══ OVERVIEW ══ -->
+    <div id="sec-overview" class="section active">
+      <div class="section-header">
+        <h1>Project Overview</h1>
+        <p>End-to-end Revenue Growth Management (RGM) modelling for Carlsberg Hong Kong — measuring how price, promotions, distribution and competition drive beer sales.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>🎯 Objective</h2>
+          <p>Estimate <strong>price elasticity</strong> and <strong>promotional elasticity</strong> at the PPG (Price Pack Group) level across two retail channels in Hong Kong, and derive actionable outputs for revenue planning.</p>
+          <div class="divider"></div>
+          <h3>Business Questions Answered</h3>
+          <ul>
+            <li>How much does volume change when price goes up / down by 1%?</li>
+            <li>How much uplift does a price promotion (TPR) generate?</li>
+            <li>How does a competitor's price or distribution change affect Carlsberg sales?</li>
+            <li>Of total sales, how much is "base" vs "promotional / incremental"?</li>
+            <li>If a competitor raises price by 10%, where does the volume flow?</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>📋 Project Context</h2>
+          <table>
+            <tr><th>Attribute</th><th>Value</th></tr>
+            <tr><td>Client</td><td><strong>Carlsberg Hong Kong</strong></td></tr>
+            <tr><td>Market</td><td>Hong Kong (HK)</td></tr>
+            <tr><td>Channels</td><td>CVS (Convenience Stores) &amp; SMKT (Supermarkets)</td></tr>
+            <tr><td>Granularity</td><td>Weekly, PPG level</td></tr>
+            <tr><td>Data Source</td><td>Scanner / EPOS retail data</td></tr>
+            <tr><td>Modelling unit</td><td>PPG (Price Pack Group)</td></tr>
+            <tr><td>Modelling window</td><td>~155 weeks (last ~3 years)</td></tr>
+            <tr><td>Algorithm</td><td>Gradient Descent (custom, constrained)</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🏗️ Data Hierarchy</h2>
+        <div class="grid-3">
+          <div class="mini-card">
+            <h4>SKU</h4>
+            <p>Lowest level — individual barcode/product. Multiple SKUs belong to one PPG. E.g. Carlsberg Can 330ml single unit.</p>
+          </div>
+          <div class="mini-card">
+            <h4>PPG (Price Pack Group)</h4>
+            <p>Modelling unit. Groups SKUs with same Brand + Pack Type + Size + Pack Count. E.g. "CARLSBERG SMOOTH DRAUGHT CAN 330ML X6".</p>
+          </div>
+          <div class="mini-card">
+            <h4>Brand → Manufacturer</h4>
+            <p>Multiple PPGs per brand. Key brands: Carlsberg, Blue Girl, Heineken, Kronenbourg 1664, Guinness, Asahi, CSD.</p>
+          </div>
+        </div>
+        <div class="alert alert-blue" style="margin-top:14px;">
+          <strong>Model Flag:</strong> Only PPGs with <code>Model Flag == 1</code> are included in modelling. Others are grouped into an "Others" bucket to preserve volume balance.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🗂️ 5-File Pipeline Summary</h2>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Master_data.py — Data Preparation</h4><p>Aggregates raw SKU-level scanner data to PPG level. Creates two versions: one with Promo Flag (used for base price derivation) and one without (used for modelling and competition mapping).</p></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Feature Engineering.py — Variable Creation</h4><p>Derives all model inputs: Base Price, TPR (discount depth), WTD (distribution), Seasonality Index, Time Trend, Stockpiling, Downsizing, OOS Ratio/Recovery, and promotional event flags (Lucky Draws, GWP, PWP).</p></div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Competition.py — Competitor Mapping</h4><p>For each PPG, identifies which other PPGs are "competitors" based on three rules: Beer Segment interaction, ABV Classification interaction, and Pack Size × Pack Count interaction. Outputs a binary competitor matrix.</p></div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Modeling.py — Gradient Descent Algorithm (GDA)</h4><p>Runs a constrained gradient descent (100 iterations) to estimate elasticity coefficients for each PPG. Variables include own price, distribution, TPR, competition price/distribution, seasonality, stockpiling, OOS, and event flags. Also calculates Base vs Incremental Sales.</p></div></div>
+          <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Volume_Transferability.py — Post-Modelling Analysis</h4><p>Uses modelling outputs to build Power BI-ready files: own elasticities, cross-price elasticities, cross-distribution elasticities, and volume transferability matrices (brand-brand &amp; internal-external).</p></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Key Outputs at a Glance</h2>
+        <div class="grid-3">
+          <div class="mini-card"><h4>Own Price Elasticity</h4><p>% volume change per 1% price change for each PPG. Typically negative (−0.5 to −4.0).</p></div>
+          <div class="mini-card"><h4>Promo Elasticity (TPR)</h4><p>Volume uplift from price promotions/discounts. Typically negative coefficient (more discount = more sales).</p></div>
+          <div class="mini-card"><h4>Cross-Price Elasticity</h4><p>How a competitor's price change affects Carlsberg PPG volumes. Positive = substitutes.</p></div>
+          <div class="mini-card"><h4>Distribution Elasticity</h4><p>Volume impact of gaining/losing shelf presence (Weighted Trading Distribution).</p></div>
+          <div class="mini-card"><h4>Base vs Incremental</h4><p>Weekly split: how much volume is "base" (would exist without promos) vs "incremental" (driven by promotions).</p></div>
+          <div class="mini-card"><h4>Volume Transferability</h4><p>If a competitor raises price by 10%, what % of their lost volume flows to each Carlsberg brand?</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ARCHITECTURE ══ -->
+    <div id="sec-architecture" class="section">
+      <div class="section-header">
+        <h1>End-to-End Architecture</h1>
+        <p>How raw retail scanner data flows through 5 scripts to produce elasticity coefficients and business insights.</p>
+      </div>
+
+      <div class="card">
+        <h2>🗺️ Pipeline Flow Diagram</h2>
+        <div class="arch-container">
+          <svg viewBox="0 0 960 760" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:940px;font-family:Inter,sans-serif;">
+            <defs>
+              <marker id="arr" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+              </marker>
+              <marker id="arr-blue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#1a56db"/>
+              </marker>
+              <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000018"/>
+              </filter>
+            </defs>
+
+            <!-- RAW DATA -->
+            <rect x="360" y="10" width="240" height="56" rx="10" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="480" y="34" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">📂 Raw SKU Data</text>
+            <text x="480" y="52" text-anchor="middle" font-size="11" fill="#64748b">Weekly scanner data (SKU level)</text>
+
+            <!-- Arrow to Master -->
+            <line x1="480" y1="66" x2="480" y2="100" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- MASTER DATA -->
+            <rect x="290" y="100" width="380" height="70" rx="10" fill="#1e3a5f" stroke="#1a56db" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="480" y="125" text-anchor="middle" font-size="13" font-weight="700" fill="white">1. Master_data.py</text>
+            <text x="480" y="143" text-anchor="middle" font-size="11" fill="#93c5fd">SKU → PPG aggregation · Average price · Volume/Value</text>
+            <text x="480" y="158" text-anchor="middle" font-size="10" fill="#60a5fa">Output: Master Data (w/ Promo) · Master Data (w/o Promo)</text>
+
+            <!-- Arrow to FE -->
+            <line x1="480" y1="170" x2="480" y2="204" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- FEATURE ENGINEERING -->
+            <rect x="250" y="204" width="460" height="84" rx="10" fill="#14532d" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="480" y="230" text-anchor="middle" font-size="13" font-weight="700" fill="white">2. Feature Engineering.py</text>
+            <text x="480" y="248" text-anchor="middle" font-size="11" fill="#86efac">Base Price · TPR · WTD Smoothing · Seasonality Index</text>
+            <text x="480" y="264" text-anchor="middle" font-size="11" fill="#86efac">Time Trend · Stockpiling · Downsizing · OOS · Event Flags</text>
+            <text x="480" y="280" text-anchor="middle" font-size="10" fill="#4ade80">Output: Feature Engineering file (model-ready dataset)</text>
+
+            <!-- Competition Rules input -->
+            <rect x="40" y="200" width="170" height="56" rx="8" fill="#fef9c3" stroke="#fbbf24" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="125" y="224" text-anchor="middle" font-size="11" font-weight="700" fill="#78350f">📋 Competition Rules</text>
+            <text x="125" y="242" text-anchor="middle" font-size="10" fill="#92400e">Beer Seg · ABV · Pack Size</text>
+
+            <!-- Arrow from FE to Competition (down-left) -->
+            <path d="M 320 288 L 320 340 L 140 340 L 140 374" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+            <!-- Arrow from Competition Rules to Competition box -->
+            <line x1="210" y1="228" x2="250" y2="350" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+
+            <!-- Arrow from FE to Modeling -->
+            <line x1="480" y1="288" x2="480" y2="322" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- COMPETITION -->
+            <rect x="40" y="374" width="280" height="70" rx="10" fill="#4c1d95" stroke="#7c3aed" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="180" y="399" text-anchor="middle" font-size="13" font-weight="700" fill="white">3. Competition.py</text>
+            <text x="180" y="417" text-anchor="middle" font-size="11" fill="#c4b5fd">Competitor mapping by segment, ABV &amp; pack</text>
+            <text x="180" y="433" text-anchor="middle" font-size="10" fill="#a78bfa">Output: Comp Matrix (CVS &amp; SMKT)</text>
+
+            <!-- MODELING -->
+            <rect x="320" y="322" width="320" height="70" rx="10" fill="#7c2d12" stroke="#ea580c" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="480" y="347" text-anchor="middle" font-size="13" font-weight="700" fill="white">4. Modeling.py — GDA</text>
+            <text x="480" y="365" text-anchor="middle" font-size="11" fill="#fdba74">Gradient Descent · 100 iterations · Constrained bounds</text>
+            <text x="480" y="381" text-anchor="middle" font-size="10" fill="#fb923c">Output: Elasticity coefficients · Base vs Incremental</text>
+
+            <!-- Arrow from Comp to Modeling -->
+            <path d="M 320 410 L 360 410 L 360 392" stroke="#7c3aed" stroke-width="1.5" fill="none" marker-end="url(#arr-blue)" stroke-dasharray="4 3"/>
+
+            <!-- Arrow from Modeling to Vol Trans -->
+            <line x1="480" y1="392" x2="480" y2="424" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- VOL TRANSFERABILITY -->
+            <rect x="240" y="424" width="480" height="84" rx="10" fill="#155e75" stroke="#0891b2" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="480" y="450" text-anchor="middle" font-size="13" font-weight="700" fill="white">5. Volume_Transferability.py</text>
+            <text x="480" y="468" text-anchor="middle" font-size="11" fill="#7dd3fc">EM → Summary · Cross-Price / Cross-Dist Elasticity</text>
+            <text x="480" y="486" text-anchor="middle" font-size="11" fill="#7dd3fc">Volume Transferability · Brand-Brand · Internal-External</text>
+            <text x="480" y="502" text-anchor="middle" font-size="10" fill="#38bdf8">Output: Power BI files · Transferability matrices</text>
+
+            <!-- Arrow to Power BI -->
+            <line x1="480" y1="508" x2="480" y2="542" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- OUTPUTS ROW -->
+            <rect x="60"  y="542" width="180" height="60" rx="8" fill="white" stroke="#e5e7eb" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="150" y="567" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">📊 Own Elasticities</text>
+            <text x="150" y="585" text-anchor="middle" font-size="10" fill="#64748b">Price + Promo per PPG</text>
+
+            <rect x="280" y="542" width="200" height="60" rx="8" fill="white" stroke="#e5e7eb" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="380" y="567" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">🔀 Cross-Price</text>
+            <text x="380" y="585" text-anchor="middle" font-size="10" fill="#64748b">Competitor price effects</text>
+
+            <rect x="520" y="542" width="200" height="60" rx="8" fill="white" stroke="#e5e7eb" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="620" y="567" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">🔄 Vol. Transferability</text>
+            <text x="620" y="585" text-anchor="middle" font-size="10" fill="#64748b">Brand-brand &amp; int/ext split</text>
+
+            <rect x="758" y="542" width="162" height="60" rx="8" fill="white" stroke="#e5e7eb" stroke-width="1.5" filter="url(#shadow)"/>
+            <text x="839" y="567" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">📈 Base vs Inc.</text>
+            <text x="839" y="585" text-anchor="middle" font-size="10" fill="#64748b">Weekly sales decomp.</text>
+
+            <!-- connecting lines to outputs -->
+            <line x1="360" y1="542" x2="240" y2="602" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="420" y1="542" x2="380" y2="602" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="540" y1="542" x2="620" y2="602" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="600" y1="542" x2="839" y2="602" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3"/>
+
+            <!-- Shares file input -->
+            <rect x="740" y="300" width="170" height="56" rx="8" fill="#fef9c3" stroke="#fbbf24" stroke-width="1.5"/>
+            <text x="825" y="324" text-anchor="middle" font-size="11" font-weight="700" fill="#78350f">📋 Shares Data</text>
+            <text x="825" y="342" text-anchor="middle" font-size="10" fill="#92400e">PPG Vol/Value shares</text>
+            <path d="M 740 328 L 640 440" stroke="#f59e0b" stroke-width="1.5" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+
+            <!-- ModelEQ input -->
+            <rect x="740" y="200" width="170" height="56" rx="8" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/>
+            <text x="825" y="224" text-anchor="middle" font-size="11" font-weight="700" fill="#831843">📋 ModelEQ.xlsx</text>
+            <text x="825" y="242" text-anchor="middle" font-size="10" fill="#9d174d">Variables + Initial Priors</text>
+            <path d="M 740 228 L 640 340" stroke="#ec4899" stroke-width="1.5" fill="none" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+
+            <!-- Power BI label -->
+            <rect x="60" y="660" width="840" height="40" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+            <text x="480" y="685" text-anchor="middle" font-size="12" font-weight="600" fill="#475569">⚡ Power BI Dashboards — Own Elasticity | Cross-Price | Volume Transferability | Base vs Incremental</text>
+          </svg>
+        </div>
+        <div class="alert alert-blue" style="margin-top:10px;">
+          <strong>Dashed lines</strong> = external input files feeding into the pipeline. <strong>Yellow boxes</strong> = Excel inputs prepared manually (Competition Rules, ModelEQ, Shares).
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>🔡 Data Transformations at Each Step</h2>
+          <table>
+            <tr><th>Script</th><th>Input Grain</th><th>Output Grain</th></tr>
+            <tr><td>Master_data.py</td><td>SKU × Week</td><td>PPG × Week</td></tr>
+            <tr><td>Feature Engineering</td><td>PPG × Week</td><td>PPG × Week + Features</td></tr>
+            <tr><td>Competition.py</td><td>PPG</td><td>PPG × Competitor Matrix</td></tr>
+            <tr><td>Modeling.py</td><td>PPG × Week + Features</td><td>Elasticity per PPG + Sales decomp</td></tr>
+            <tr><td>Vol. Transferability</td><td>Elasticities + Shares</td><td>Brand/PPG transfer matrices</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h2>⏱️ Execution Order</h2>
+          <ol style="padding-left:18px; font-size:14px; line-height:2;">
+            <li><strong>Master_data.py</strong> — Always run first</li>
+            <li><strong>Feature Engineering.py</strong> — Depends on Master Data output</li>
+            <li><strong>Competition.py</strong> — Parallel to FE (only needs Master Data)</li>
+            <li><strong>Modeling.py</strong> — Needs FE output + ModelEQ file + Competition results</li>
+            <li><strong>Volume_Transferability.py</strong> — Final step, needs Modeling output</li>
+          </ol>
+          <div class="alert alert-amber" style="margin-top:12px;">
+            ⚠️ Each script has hardcoded file paths. Update <code>os.chdir()</code> and input/output paths before running in a new environment.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ KEY CONCEPTS ══ -->
+    <div id="sec-concepts" class="section">
+      <div class="section-header">
+        <h1>Key Concepts</h1>
+        <p>Core terminology and methodology used throughout the codebase. Click each card to expand.</p>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">📦</span>
+          <div><div class="concept-title">PPG — Price Pack Group</div><div class="concept-subtitle">The fundamental unit of modelling</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          A <strong>PPG (Price Pack Group)</strong> groups multiple individual SKUs that share the same commercial identity: same Brand, Pack Type, Pack Size, and Pack Count. For example, all 330ml Carlsberg cans sold in a 6-pack are one PPG, regardless of which retailer stocks them.<br/><br/>
+          <strong>Why PPG and not SKU?</strong> SKU-level data is too granular and noisy for meaningful elasticity estimation. Aggregating to PPG level ensures enough volume to fit statistically reliable models.<br/><br/>
+          <code>Model Flag == 1</code> means the PPG has enough volume/history to be modelled. PPGs with <code>Model Flag == 0</code> are bucketed into "Others".
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">💰</span>
+          <div><div class="concept-title">Base Price vs Average Price</div><div class="concept-subtitle">Separating the "real" price from the promoted price</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          <strong>Average Price</strong> is simply Total Revenue ÷ Total Units sold in a week. It includes weeks when products are on promotion — so it's a blended price.<br/><br/>
+          <strong>Base Price</strong> is the "regular" (non-promoted) price a product sells at. It represents what consumers pay when there is no active discount.<br/><br/>
+          <strong>How is Base Price calculated?</strong> Using an 8-week rolling maximum of Average Price on non-promotional weeks, followed by two smoothing passes:
+          <ol style="margin:8px 0 8px 20px;">
+            <li>Remove single-week "blips" (spikes surrounded by lower values)</li>
+            <li>Cap small changes (≤1%) to avoid noise</li>
+          </ol>
+          <div class="concept-formula">Base Price ≈ max(Avg Price) over rolling 8-week non-promo window</div>
+          <div class="alert alert-amber">Base Price is always ≥ Average Price (it's the ceiling). If Avg Price exceeds Base Price in any week, Base Price is corrected upward.</div>
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">🏷️</span>
+          <div><div class="concept-title">TPR — Temporary Price Reduction</div><div class="concept-subtitle">Measuring the depth of promotional discounts</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          <strong>TPR</strong> captures how deep a price promotion is in a given week. It is computed as the discount from Base Price:
+          <div class="concept-formula">TPR = 1 − (Average Price / Base Price)</div>
+          TPR = 0 means no promotion (selling at full Base Price). TPR = 0.20 means a 20% discount. A minimum threshold of 5% is applied — discounts smaller than 5% are treated as TPR = 0 (noise).<br/><br/>
+          In modelling, <code>LN_TPR = log(1 + TPR)</code> is used as a variable. Its coefficient (elasticity) is expected to be negative: a larger discount → more sales.
+          <div class="alert alert-blue">TPR is calculated only when Total Units ≥ 8-week rolling mean (avoiding counting low-volume weeks as "promo weeks").</div>
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">🏪</span>
+          <div><div class="concept-title">WTD — Weighted Trading Distribution</div><div class="concept-subtitle">A measure of where the product is sold</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          <strong>WTD (Weighted Trading Distribution)</strong> measures not just whether a product is stocked in a store, but the <em>importance</em> of those stores. It weights store presence by the store's share of total category sales.<br/><br/>
+          A WTD of 80% means the product is available in stores that account for 80% of total beer sales in that channel.<br/><br/>
+          <strong>LN_WTD</strong> (log of WTD) is the modelling variable. A positive coefficient means better distribution → higher sales. WTD is also smoothed (same 8-week rolling max method as Base Price) to remove noise from temporary distribution changes.
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">📈</span>
+          <div><div class="concept-title">Price Elasticity</div><div class="concept-subtitle">How sensitive volume is to price changes</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          <strong>Own Price Elasticity</strong> = % change in volume for a 1% change in own price. Because the model uses log-log specification:
+          <div class="concept-formula">log(Volume) = α + β₁·log(Base Price) + β₂·log(WTD) + ... + ε<br/>β₁ = Own Price Elasticity</div>
+          The coefficient of <code>LN_Base_Units_Price</code> is directly the own price elasticity. It must be negative (higher price → lower volume).<br/><br/>
+          <strong>Bounds enforced:</strong> Own price elasticity is constrained to [−4.0, −0.01] to ensure economic sense.<br/><br/>
+          <strong>Cross-Price Elasticity</strong> measures how a competitor's price change affects a Carlsberg PPG's volume. Positive cross-price elasticity = substitutes (if competitor raises price, consumers switch to Carlsberg).
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">🔻</span>
+          <div><div class="concept-title">Stockpiling</div><div class="concept-subtitle">The post-promo demand dip</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          During a promotion, consumers "stockpile" — buying more than they normally would. In the weeks <em>after</em> the promotion ends, they consume from their stockpile and buy less. This creates a negative demand effect.<br/><br/>
+          <strong>How it's modelled:</strong> For each discount week (TPR &gt; threshold), a decay function is applied over the next 1–3 weeks. Multiple decay rates (5% to 20%) are tested. The rate with the strongest negative correlation with actual sales is chosen per PPG.
+          <div class="concept-formula">StockPiling(t+k) = discount_flag(t) × (1 − decay_rate)^k</div>
+          The stockpiling variable has a negative elasticity in the model (it depresses sales in post-promo weeks).
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">❌</span>
+          <div><div class="concept-title">OOS — Out of Stock</div><div class="concept-subtitle">Lost sales due to unavailability</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          When a product is not available in stores, sales fall below their potential. The <strong>OOS Ratio</strong> measures this lost distribution:<br/><br/>
+          <strong>Step 1:</strong> Compute a "Transformed WTD" — the WTD on non-promo weeks (promo periods distort WTD upward).<br/>
+          <strong>Step 2:</strong> Track the ACV Threshold — the 30th percentile of normal WTD levels for each stable distribution period.<br/>
+          <strong>Step 3:</strong> OOS = max(0, ACV_Threshold − Transformed_WTD)<br/>
+          <strong>Step 4:</strong> OOS_Recovery = when OOS ratio is recovering (falling back toward threshold).
+          <div class="concept-formula">OOS_Ratio = OOS / 100</div>
+          OOS elasticity is negative (out-of-stock → fewer sales). OOS Recovery is positive (recovering stock → more sales).
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">🤖</span>
+          <div><div class="concept-title">Gradient Descent Algorithm (GDA)</div><div class="concept-subtitle">How the model estimates elasticities</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          Instead of a standard OLS regression, a <strong>custom constrained gradient descent</strong> is used. This allows:<br/>
+          <ul style="margin:8px 0 8px 20px;">
+            <li>Enforcing economic sign constraints (e.g., own price must be negative)</li>
+            <li>Incorporating prior beliefs (from OLS estimates as starting points)</li>
+            <li>Handling collinearity between variables</li>
+          </ul>
+          <strong>How it works (100 iterations per PPG):</strong>
+          <ol style="margin:8px 0 8px 20px;">
+            <li><strong>Initialize:</strong> Set coefficients from OLS priors</li>
+            <li><strong>Predict:</strong> Compute predicted log-sales = α + Σ(coefficient × variable)</li>
+            <li><strong>Error:</strong> error = exp(Actual) − exp(Predicted)</li>
+            <li><strong>Correlation:</strong> Pearson correlation of each variable with the error term</li>
+            <li><strong>Update:</strong> Move each coefficient in the direction that reduces error, within its bounds</li>
+            <li><strong>Slowdown:</strong> If a coefficient oscillates (sign flips in consecutive iterations), apply a slowdown factor to stabilize</li>
+          </ol>
+          <div class="concept-formula">New Prior = Prior + |Prior| × min(max_step, |error|²) × error/|error|</div>
+          Specific update rules differ per variable type (bounded vs unbounded).
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">📊</span>
+          <div><div class="concept-title">Base vs Incremental Sales</div><div class="concept-subtitle">Decomposing total sales into structural and promotional</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          After modelling, total predicted sales are decomposed into two components:<br/><br/>
+          <strong>Base Sales</strong> = what would have been sold without any promotional activity (TPR, Lucky Draws, GWP, PWP events).<br/>
+          <strong>Incremental Sales</strong> = the additional volume driven by promotions = Predicted Sales − Base Sales<br/><br/>
+          <div class="concept-formula">
+            Base Sales = exp(α + β_price·Price + β_dist·WTD + β_season·SI + β_trend·TT + ...)<br/>
+            Incremental Sales = Predicted Sales − Base Sales
+          </div>
+          This split is then applied to actual observed sales (via a % ratio) to give real-world Base_Actual and Incremental_Actual.
+        </div>
+      </div>
+
+      <div class="concept-card">
+        <div class="concept-header" onclick="toggleConcept(this)">
+          <span class="concept-icon">🔄</span>
+          <div><div class="concept-title">Volume Transferability</div><div class="concept-subtitle">Where does volume go when a competitor changes price?</div></div>
+          <span class="concept-arrow">▶</span>
+        </div>
+        <div class="concept-body">
+          <strong>Volume Transferability</strong> answers: "If competitor X raises its price by 10%, what fraction of the volume they lose flows to each Carlsberg PPG?"<br/><br/>
+          <strong>Algorithm:</strong>
+          <ol style="margin:8px 0 8px 20px;">
+            <li>For each competitor PPG, find all Carlsberg PPGs that have a cross-price elasticity with that competitor</li>
+            <li>Compute Volume Gain % = 0.10 × Cross Price Elasticity (simulating a 10% price rise)</li>
+            <li>Compute absolute Volume Gain = Vol Gain % × actual volume of Carlsberg PPG</li>
+            <li>Vol Transferability = each PPG's gain / total gain (proportion)</li>
+          </ol>
+          Results are aggregated to Brand-Brand and Internal (Carlsberg vs Carlsberg) vs External (Competitor vs Carlsberg) levels.
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MASTER DATA ══ -->
+    <div id="sec-master" class="section">
+      <div class="section-header">
+        <h1>1. Master_data.py</h1>
+        <p>Data preparation — aggregates raw SKU-level scanner data to PPG (Price Pack Group) level.</p>
+      </div>
+      <div class="file-band">
+        <div class="fname">Master_data.py</div>
+        <div class="fdesc">Reads SKU-level weekly data → aggregates to PPG level → outputs two clean master datasets</div>
+        <div class="fmeta">
+          <div class="fmeta-item">⏱ ~1 min runtime</div>
+          <div class="fmeta-item">📥 Input: <strong>Carlsberg_HK_Master Data(SKU)_with Promo.xlsx</strong></div>
+          <div class="fmeta-item">📤 Two output Excel files</div>
+        </div>
+      </div>
+      <div class="io-row">
+        <div class="io-box io-in"><h5>📥 Input</h5><p>SKU-level weekly scanner data with Promo Flag, Channel, Brand, PPG, Pack Type, Size, Count, Volume, Value, Units, WTD, ND</p></div>
+        <div class="io-box io-out"><h5>📤 Output 1</h5><p><strong>Master Data (PPG) with Promo Flag</strong> — used for base price computation in Feature Engineering</p></div>
+        <div class="io-box io-out"><h5>📤 Output 2</h5><p><strong>Master Data (PPG) without Promo Flag</strong> — used for Competition mapping and as main modelling input</p></div>
+      </div>
+      <div class="card">
+        <h2>Section-by-Section Walkthrough</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Manual Pack Size Corrections</h4>
+              <p>Some PPGs contain variant SKUs with slightly different sizes (e.g., "330/340/350ml"). These are standardised to a single canonical pack size before aggregation.</p>
+              <pre><code><span class="comment"># Fix ambiguous PPG pack sizes</span>
+df.loc[df['PPG']=='ASAHI CAN 330/340/350ML X6', 'Pack Size'] = 350
+df.loc[df['PPG']=='CSD CAN 320/330ML X12',       'Pack Size'] = 330</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>SKU → PPG Aggregation (With Promo Flag)</h4>
+              <p>Sums Volume, Value, Units, WTD, ND across all SKUs within the same PPG × Channel × Promo Flag × Date combination. Average price is then derived from aggregated totals.</p>
+              <pre><code><span class="comment"># Group keys include Promo Flag → creates separate rows for promo/non-promo weeks</span>
+group_keys = ['Channel','Brand','PPG','Model Flag','Promo Flag','Date', ...]
+df_final = df.groupby(group_keys).agg({'Total Value': sum, 'Total Volume': sum, ...})
+
+<span class="comment"># Average price from aggregated totals (not average of averages)</span>
+df_final['Average Price (Unit)'] = df_final['Total Value'] / df_final['Total Units']</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>SKU → PPG Aggregation (Without Promo Flag)</h4>
+              <p>Same aggregation but without the Promo Flag as a grouping key — this collapses promo and non-promo rows into a single weekly record per PPG. This is the main dataset used downstream.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4>Handle Non-Modelled PPGs</h4>
+              <p>PPGs with <code>Model Flag == 0</code> are kept in the data (to preserve total volume balance) but their category identifiers are replaced with "Others" so they don't interfere with modelled PPG analysis.</p>
+              <pre><code><span class="comment"># Collapse non-modelled PPGs into an "Others" bucket</span>
+cols = ['Segment','Beer Type','Manufacturer','Brand','PPG',...]
+df_final.loc[df_final['Model Flag'] == 0, cols] = 'Others'</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <h4>Data Quality Filters</h4>
+              <p>Infinite values (from division by zero in price calculations) are replaced with NaN and then 0. Rows where Total Units ≤ 0 are dropped (non-selling periods).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>🔑 Key Design Decisions</h2>
+        <div class="grid-2">
+          <div class="mini-card"><h4>Why two output files?</h4><p>The "with Promo" file is needed for Feature Engineering to correctly identify non-promo weeks for Base Price calculation. The "without Promo" file is cleaner for everything else.</p></div>
+          <div class="mini-card"><h4>Why keep Model Flag == 0?</h4><p>Removing non-modelled PPGs would understate channel-level volume totals. Keeping them as "Others" preserves the volume universe for accurate share calculations.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ FEATURE ENGINEERING ══ -->
+    <div id="sec-features" class="section">
+      <div class="section-header">
+        <h1>2. Feature Engineering.py</h1>
+        <p>Derives all model variables from the master data — the most computationally intensive preprocessing step.</p>
+      </div>
+      <div class="file-band">
+        <div class="fname">Feature Engineering.py</div>
+        <div class="fdesc">11 distinct feature derivation steps → produces the model-ready dataset</div>
+        <div class="fmeta">
+          <div class="fmeta-item">⏱ ~5–15 min runtime</div>
+          <div class="fmeta-item">📥 Input: Both Master Data files</div>
+          <div class="fmeta-item">📤 Output: Feature Eng Excel file (one row per PPG × Week)</div>
+        </div>
+      </div>
+      <div class="io-row">
+        <div class="io-box io-in"><h5>📥 Inputs</h5><p>Master Data (with Promo) for Base Price; Master Data (without Promo) for all other features</p></div>
+        <div class="io-box io-out"><h5>📤 Output</h5><p>Single Excel file with all model variables: Base Price, TPR, WTD_Smoothened, SeasonalityIndex, Time_Trend, StockPiling, OOS_Ratio, OOS_Recovery, Downsizing, event flags</p></div>
+      </div>
+      <div class="card">
+        <h2>Feature 1 — Base Price Calculation</h2>
+        <span class="tag tag-amber">Non-Promo Weeks Only</span>
+        <span class="tag tag-blue">8-Week Rolling Max</span>
+        <span class="tag tag-purple">3-Pass Smoothing</span>
+        <div class="divider"></div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Filter to non-promo weeks</h4>
+              <p>Use the "with Promo" dataset. Filter <code>Promo Flag == 0</code> (keeping only weeks when the product was NOT on promotion). This ensures the base price isn't contaminated by promotional prices.</p>
+              <div class="alert alert-amber">If a PPG is always marked as promoted (no non-promo weeks), it's flagged and excluded from base price derivation.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>8-Week Rolling Maximum (forward + backward)</h4>
+              <p>Two rolling windows are computed and the minimum is taken at each point — this produces a robust "ceiling" price that handles both gradual price increases and price reductions.</p>
+              <pre><code><span class="comment"># Forward-fill 8-week rolling max (backward-filled for start of series)</span>
+bp1 = df.groupby(['Channel','PPG'])['Avg Price'].apply(
+    lambda x: x.rolling(8).max()
+)
+<span class="comment"># Backward-looking shifted window (forward-filled for end of series)</span>
+bp2 = df.groupby(['Channel','PPG'])['Avg Price'].apply(
+    lambda x: x.rolling(8).max().shift(-7)
+)
+<span class="comment"># Take minimum of both → Base_Units_Price_8WR</span>
+df['Base_Price_8WR'] = min(bp1, bp2)</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>Smoothing Pass 1 — Cap sudden upward jumps</h4>
+              <p>If base price at week t is higher than both the previous base price AND the current average price, cap it to max(previous base price, current average price). Prevents artificial price spikes.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4>Smoothing Pass 2 — Remove isolated blips</h4>
+              <p>If a point is higher than both its neighbours (isolated spike) OR lower than both its neighbours (isolated dip), replace it with the previous value. Then apply 1% threshold — changes smaller than 1% are flattened.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <h4>Final correction</h4>
+              <p>Ensure Base Price ≥ Average Price at all times (by definition, base price can never be below average price).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Feature 2 — WTD Smoothing</h2>
+        <span class="tag tag-blue">Same methodology as Base Price</span>
+        <p style="margin-top:10px;">The same 8-week rolling max + 2-pass smoothing pipeline is applied to WTD (Weighted Trading Distribution). This removes artificial distribution spikes during promotional periods and produces a stable underlying distribution trend for modelling.</p>
+      </div>
+      <div class="card">
+        <h2>Feature 3 — TPR (Temporary Price Reduction)</h2>
+        <span class="tag tag-red">Promotional Depth Variable</span>
+        <pre><code><span class="comment"># TPR = discount depth from Base Price</span>
+TPR = 1 − (Average Price / Base Price)
+
+<span class="comment"># Apply 5% threshold — tiny discounts treated as no discount</span>
+TPR = 0 if TPR &lt; 0.05
+
+<span class="comment"># Also zero-out TPR if volume &lt; 8-week mean (low-volume weeks)</span>
+TPR = 0 if Total_Units &lt; 8_week_rolling_mean_of_units
+
+<span class="comment"># Final model variable</span>
+LN_TPR = log(1 + TPR)</code></pre>
+      </div>
+      <div class="card">
+        <h2>Feature 4 — Seasonality Index</h2>
+        <span class="tag tag-green">Week-of-year pattern</span>
+        <span class="tag tag-purple">Savitzky-Golay smoothed</span>
+        <p style="margin-top:10px;">Captures predictable seasonal patterns in beer consumption (e.g., summer peaks, holiday periods):</p>
+        <ol style="padding-left:20px; margin-top:10px; font-size:14px; line-height:1.9;">
+          <li>Sum total volume by Channel × Week-of-year across all PPGs</li>
+          <li>Compute average weekly volume across the whole dataset</li>
+          <li>SI = (week's avg volume) / (overall avg volume) — values above 1.0 = above-average weeks</li>
+          <li>Apply <strong>Savitzky-Golay filter</strong> (window=15, polynomial order=3) to smooth the curve</li>
+        </ol>
+        <div class="alert alert-blue">Savitzky-Golay is a local polynomial smoothing filter that preserves peaks and troughs better than a simple moving average.</div>
+      </div>
+      <div class="card">
+        <h2>Feature 5 — Stockpiling</h2>
+        <span class="tag tag-amber">Post-promo demand dip</span>
+        <p style="margin-top:10px;">For each discount week, volume in subsequent 1–3 weeks decays by a factor. Multiple decay rates (5%, 10%, 15%, 20%) are computed. The decay rate with the <strong>most negative correlation</strong> with actual sales is selected per PPG (because stockpiling should depress future sales).</p>
+        <pre><code><span class="comment"># For decay rate j, for each week i after a promo:</span>
+StockPiling_j(t+i) = discount_flag(t) × (1 − j)^(i+1)
+
+<span class="comment"># Take max across the 1-3 lag weeks → summarizes the ongoing effect</span>
+StockPiling_j = max(StockPiling_j_lag1, lag2, lag3)
+
+<span class="comment"># Select the decay rate with min correlation to actual units per PPG</span>
+final_stockpiling = argmin(correlation(StockPiling_j, Total Units))</code></pre>
+      </div>
+      <div class="card">
+        <h2>Feature 6 — Promotional Event Flags</h2>
+        <span class="tag tag-purple">Binary (0/1) indicators</span>
+        <p style="margin-top:10px;">Specific promotional events run by Carlsberg HK are flagged with binary variables. These capture volume uplift from non-TPR activities:</p>
+        <table>
+          <tr><th>Variable</th><th>Event Type</th><th>Brands</th><th>Channels</th></tr>
+          <tr><td><code>BG Lucky Draw</code></td><td>Lucky Draw Campaign</td><td>Blue Girl</td><td>CVS, SMKT</td></tr>
+          <tr><td><code>Carlsberg Lucky Draw</code></td><td>Lucky Draw Campaign</td><td>Carlsberg, AFB, CSD, Special Brew</td><td>CVS, SMKT</td></tr>
+          <tr><td><code>CSD Lucky Draw</code></td><td>Lucky Draw Campaign</td><td>Carlsberg Smooth Draught</td><td>CVS</td></tr>
+          <tr><td><code>Heineken Lucky Draw</code></td><td>Lucky Draw Campaign</td><td>Heineken</td><td>CVS, SMKT</td></tr>
+          <tr><td><code>GWP</code></td><td>Gift With Purchase</td><td>Carlsberg, Heineken, Snow, Blue Girl</td><td>CVS, SMKT</td></tr>
+          <tr><td><code>PWP</code></td><td>Purchase With Purchase (Multibuy)</td><td>Carlsberg, Blue Girl, CSD</td><td>CVS, SMKT</td></tr>
+          <tr><td><code>Heineken Top Spender</code></td><td>Spend-based promotion</td><td>Heineken</td><td>CVS, SMKT</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Feature 7 — OOS (Out of Stock)</h2>
+        <span class="tag tag-red">Distribution-based</span>
+        <p style="margin-top:10px;">Three steps to compute OOS Ratio and OOS Recovery:</p>
+        <ol style="padding-left:20px; margin-top:10px; font-size:14px; line-height:1.9;">
+          <li><strong>Transformed WTD:</strong> On promo weeks, WTD is inflated. Transform it by filling forward the non-promo WTD baseline.</li>
+          <li><strong>ACV Threshold:</strong> 30th percentile of Transformed WTD during stable distribution periods (when the ACV Reach sign is 0, i.e., no significant change).</li>
+          <li><strong>OOS = max(0, ACV_Threshold − Transformed_WTD)</strong> — if current distribution is below threshold, the product is OOS.</li>
+          <li><strong>OOS_Recovery</strong> = negative of week-on-week change in OOS_Ratio when OOS is falling (stock coming back).</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Other Features</h2>
+        <div class="grid-2">
+          <div class="mini-card">
+            <h4>⏳ Time Trend</h4>
+            <p>Assigns a sequential period number to each unique week. <code>Time_Trend = 1 + (Period_Number / 100)</code>. Captures long-run secular trends in category consumption.</p>
+          </div>
+          <div class="mini-card">
+            <h4>📦 Downsizing</h4>
+            <p>Detects if a PPG's effective pack size has changed over time (e.g., 330ml → 320ml same price). Computed as <code>(Total Volume × 1000) / Total Units</code> rounded to nearest 2% of nominal pack size.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ COMPETITION ══ -->
+    <div id="sec-competition" class="section">
+      <div class="section-header">
+        <h1>3. Competition.py</h1>
+        <p>Builds a binary competitor mapping matrix — for each Carlsberg PPG, which other PPGs are considered its competitors?</p>
+      </div>
+      <div class="file-band">
+        <div class="fname">Competition.py</div>
+        <div class="fdesc">3-rule competition mapping: Beer Segment × ABV Classification × Pack Size/Count interactions</div>
+        <div class="fmeta">
+          <div class="fmeta-item">📥 Input: Master Data (without Promo) + Competition Rules Excel</div>
+          <div class="fmeta-item">📤 Output: Comp_Matrix (CVS &amp; SMKT separate + merged file)</div>
+        </div>
+      </div>
+      <div class="io-row">
+        <div class="io-box io-in"><h5>📥 Inputs</h5><p>Master Data (no Promo) · Competition Rules Excel (3 sheets: Segment interaction, Pack Size×Count, ABV Classification)</p></div>
+        <div class="io-box io-out"><h5>📤 Output</h5><p>Comp_Mapping_final_CVS.xlsx · Comp_Mapping_final_SMKT.xlsx · Merged Comp_matrix_HK.xlsx — each with a binary competitor flag matrix</p></div>
+      </div>
+      <div class="card">
+        <h2>Competition Rules Logic</h2>
+        <p style="margin-bottom:14px;">Two PPGs are considered competitors if and only if <strong>all three rules are satisfied simultaneously</strong>:</p>
+        <div class="grid-3">
+          <div class="mini-card">
+            <h4>Rule 1: Beer Segment</h4>
+            <p>Segments that are "close enough" to compete — e.g., Premium vs Super-Premium may compete, but Economy and Premium may not. Defined in a cross-segment interaction matrix.</p>
+          </div>
+          <div class="mini-card">
+            <h4>Rule 2: ABV Classification</h4>
+            <p>Alcohol content bands. Regular, Mid-Strength, and Strong beers may or may not compete with each other depending on the interaction matrix.</p>
+          </div>
+          <div class="mini-card">
+            <h4>Rule 3: Pack Size × Pack Count</h4>
+            <p>Pack format (Single vs Multipack, Regular/King/Super-King sizes). CVS uses Single vs Multipack; SMKT uses 1/4/6/12 pack categories with more granular rules.</p>
+          </div>
+        </div>
+        <div class="alert alert-blue" style="margin-top:14px;">
+          <strong>Competition flag = 1</strong> only when Flag1=1 AND Flag2=1 AND Flag3=1. This AND-logic ensures only truly substitutable products are modelled as competitors.
+        </div>
+      </div>
+      <div class="card">
+        <h2>Step-by-Step Process</h2>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Prepare PPG attributes</h4><p>Classify each PPG into Pack Size Range (Regular &lt;440ml / King 440–500ml / Super King &gt;500ml) and Pack Count Range. Derive BEER_SEGMENT from Segment column and ABV Class from ABV Classification.</p></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Convert interaction matrices to long format</h4><p>The Excel input files have interaction matrices in wide format (rows = target type, columns = competitor type, values = 0/1 flag). These are melted to long format for easier joining.</p></div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Create full PPG pair list</h4><p>All PPG pairs within a channel are generated. Then the pair list is made symmetric — if A competes with B, then B also competes with A.</p></div></div>
+          <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Merge and apply all three rules</h4><p>The three interaction flags are joined to the PPG pair list. Final Competition Inclusion Flag = 1 only when all three intermediate flags = 1.</p></div></div>
+          <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Pivot to matrix format</h4><p>Convert from long format (Target, Competitor, Flag) to wide matrix format (rows = Target PPG, columns = Competitor PPGs, values = 0/1). This is the format consumed by the Modelling script.</p></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>📌 Important Notes</h2>
+        <ul>
+          <li>The script runs <strong>separately for CVS and SMKT</strong> — CVS uses "Single/Multipack" pack count rules while SMKT uses granular 1/4/6/12 count buckets.</li>
+          <li>A merged matrix (Comp_matrix_HK.xlsx) combines both channels into one file.</li>
+          <li>PPGs not mapped to any competitor (due to uniqueness in category) are flagged in a <code>missing_comp</code> dataframe — these receive zero cross-price elasticity in modelling.</li>
+          <li>Only the last 1 year (52 weeks) of data is used for computing competition mapping (recent market structure).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ══ MODELING ══ -->
+    <div id="sec-modeling" class="section">
+      <div class="section-header">
+        <h1>4. Modeling.py</h1>
+        <p>The core modelling engine — runs a custom constrained Gradient Descent Algorithm to estimate all elasticity coefficients for each PPG.</p>
+      </div>
+      <div class="file-band">
+        <div class="fname">Modeling.py</div>
+        <div class="fdesc">Custom GDA: 100 iterations × N PPGs — estimates price, promo, distribution, competition, and event elasticities</div>
+        <div class="fmeta">
+          <div class="fmeta-item">⏱ Can take 30–120 min depending on number of PPGs</div>
+          <div class="fmeta-item">📥 Feature Eng data · ModelEQ.xlsx (priors) · Competition results</div>
+          <div class="fmeta-item">📤 GDA Coefficients · Base vs Incremental Sales · Predicted vs Actual</div>
+        </div>
+      </div>
+      <div class="io-row">
+        <div class="io-box io-in"><h5>📥 Key Inputs</h5><p><strong>Feature Eng Output</strong> (model variables) · <strong>ModelEQ.xlsx</strong> (list of variables per PPG + OLS priors + SD) · Competition matrix · Shares data</p></div>
+        <div class="io-box io-out"><h5>📤 Outputs</h5><p><strong>GDA Coefficients</strong> (final elasticities per PPG) · <strong>Base vs Incremental</strong> (weekly sales decomposition) · <strong>R² and MAPE</strong> per PPG</p></div>
+      </div>
+
+      <div class="card">
+        <h2>Economic Constraints / Bounds</h2>
+        <p style="margin-bottom:12px;">All coefficients are constrained to economically meaningful ranges. The GDA never allows a coefficient to violate these bounds:</p>
+        <table>
+          <tr><th>Variable</th><th>Lower Bound</th><th>Upper Bound</th><th>Rationale</th></tr>
+          <tr><td>Own Price (LN_Base_Units_Price)</td><td>−4.0</td><td>−0.01</td><td>Must be negative (demand law). Max of −4 is very elastic.</td></tr>
+          <tr><td>Distribution (LN_WTD)</td><td>+0.01</td><td>+4.0</td><td>More distribution = more sales (positive).</td></tr>
+          <tr><td>TPR (LN_TPR)</td><td>−15.0</td><td>−0.01</td><td>Promotion drives volume (negative coeff = more discount → more sales).</td></tr>
+          <tr><td>Competitor Price (LN_Avg_Price)</td><td>+0.001</td><td>+0.75 × CCF</td><td>Competitor price rise = volume gain (positive). Capped by Competition Coeff Factor.</td></tr>
+          <tr><td>Competitor Distribution (LN_Comp_WTD)</td><td>−0.5 × CCF</td><td>−0.001</td><td>Competitor gaining distribution = our volume loss (negative).</td></tr>
+          <tr><td>OOS Ratio</td><td>−4.0</td><td>−0.01</td><td>OOS depresses sales (negative).</td></tr>
+          <tr><td>OOS Recovery</td><td>+0.01</td><td>+2.0</td><td>OOS recovering = sales bouncing back (positive).</td></tr>
+          <tr><td>Downsizing</td><td>+0.01</td><td>+2.0</td><td>Pack size reduction → apparent price cut → volume gain.</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Competition Coefficient Factor (CCF)</h2>
+        <p style="margin-bottom:10px;">The upper bound for cross-price elasticities is not fixed — it scales with the relative volume of the competitor PPG vs the target PPG:</p>
+        <pre><code><span class="comment"># CCF ensures a competitor's impact cannot exceed its relative market size</span>
+CCF = competitor_PPG_volume / (competitor_PPG_volume + target_PPG_volume)</code></pre>
+        <p>A large competitor (high CCF) can have a bigger impact on your sales than a tiny one. This prevents economically impossible large cross-price elasticities.</p>
+      </div>
+
+      <div class="card">
+        <h2>GDA Core Algorithm — 7 Functions</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4><code>createdata()</code> — Build X and Y matrices</h4>
+              <p>For a given PPG, pivots the RawData long-format dataframe into a wide matrix: columns = variables, rows = weeks. Y = log(actual sales). X = log-transformed feature values. Missing X values are filled with 0.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4><code>setting_priors()</code> — Initialize/validate priors</h4>
+              <p>Converts the prior dictionary. Applies a special rule: OOS Recovery prior cannot exceed OOS Ratio prior in absolute magnitude (recovery ≤ original impact).</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4><code>calculating_alpha()</code> — Compute intercept</h4>
+              <p>The intercept α = mean(Y) − mean(Ŷ). This ensures the model's predicted mean equals the actual mean — a fundamental requirement for an unbiased model.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4><code>ComputePredictedSales()</code> — Forward pass</h4>
+              <p>Computes Ŷ = α + Σ(coefficient_i × X_i) for all weeks. Stores results per iteration.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <h4><code>ComputeErrorandCorrelation()</code> — Backward pass</h4>
+              <p>error = exp(Y_actual) − exp(Ŷ). Then computes Pearson correlation of each variable with this error. Variables positively correlated with error should have their coefficient increased; negatively correlated should be decreased.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">6</div>
+            <div class="step-content">
+              <h4><code>AdjustandUpdatePriors()</code> — Constrained update step</h4>
+              <p>Updates each coefficient within its bounds:</p>
+              <pre><code><span class="comment"># General update rule (for unbounded variables):</span>
+New_Prior = Prior + |Prior| × min(max_step, error²) × error/|error|
+
+<span class="comment"># For bounded variables (e.g., own price, negative bound):</span>
+<span class="comment"># If error &lt; 0: push toward lower bound</span>
+New_Prior = Prior + max((LL − Prior)/2, |Prior| × step × error/|error|)
+<span class="comment"># If error &gt; 0: push toward upper bound</span>
+New_Prior = min(UL − (UL − Prior)/2, Prior + |Prior| × step × error/|error|)</code></pre>
+              <p style="margin-top:8px;">The <strong>Slowdown Factor</strong> is initialized at 2.0 and increases by 1.2× each time a variable's correlation sign oscillates between consecutive iterations — preventing it from "bouncing" and not converging.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">7</div>
+            <div class="step-content">
+              <h4><code>calculateBaseline()</code> — Base vs Incremental decomposition</h4>
+              <p>Reconstructs predicted sales using only "base" variables (excluding TPR and all event flags). The remaining = Incremental Sales. Both are then applied to actual observed sales using a proportional split.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Model Iteration Pruning</h2>
+        <p>At iterations 15, 45, and 70, weak variables are pruned (set to 0.0):</p>
+        <ul style="padding-left:20px; margin-top:8px; font-size:14px; line-height:1.9;">
+          <li>Competitor price variables with coefficients &lt;0.005 → dropped</li>
+          <li>Competitor distribution variables with |coefficient| &lt;0.005 → dropped</li>
+          <li>Seasonality and Stockpiling with |coefficient| &lt;0.005 → dropped</li>
+        </ul>
+        <div class="alert alert-blue">This pruning prevents over-fitting and ensures only variables with meaningful impact are retained in the final model.</div>
+      </div>
+
+      <div class="card">
+        <h2>Model Quality Metrics</h2>
+        <div class="grid-2">
+          <div class="mini-card">
+            <h4>R² (R-Squared)</h4>
+            <p>Proportion of variance in actual sales explained by the model. Target: R² ≥ 0.70. Computed from linear regression of predicted vs actual on the final (100th) iteration.</p>
+          </div>
+          <div class="mini-card">
+            <h4>MAPE (Mean Absolute % Error)</h4>
+            <p>Average absolute percentage error of predictions. Target: MAPE ≤ 25–30%. Lower is better.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ VOL TRANSFERABILITY ══ -->
+    <div id="sec-transferability" class="section">
+      <div class="section-header">
+        <h1>5. Volume_Transferability.py</h1>
+        <p>Post-modelling analysis — converts raw elasticity outputs into actionable Power BI dashboards and volume transfer matrices.</p>
+      </div>
+      <div class="file-band">
+        <div class="fname">Volume_Transferability.py</div>
+        <div class="fdesc">3 modules: EM→Summary · Power BI Screens · Volume Transferability algorithm</div>
+        <div class="fmeta">
+          <div class="fmeta-item">📥 GDA Coefficients · Shares data · Modelling screens output</div>
+          <div class="fmeta-item">📤 Summary file · Modelling_Screens_PowerBI · Vol_Transferability (Brand + PPG level)</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Module 1 — EM to Summary File</h2>
+        <span class="tag tag-blue">Consolidation</span>
+        <p style="margin-top:10px;">The Elasticity Matrix (EM) output from Modeling.py is in a per-PPG format. This module:</p>
+        <ol style="padding-left:20px; margin:10px 0; font-size:14px; line-height:1.9;">
+          <li>Reads all model result sheets from the GDA output Excel</li>
+          <li>Melts from wide (one column per variable) to long (one row per PPG × variable)</li>
+          <li>Tags each variable as own vs competitor, renames variables to final standard names</li>
+          <li>Merges cross-distribution elasticities (LN_Comp_WTD) from GDA summary file</li>
+          <li>Outputs a unified <code>HK_Carlsberg_summary.xlsx</code> in long format</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>Module 2 — Power BI Modelling Screens</h2>
+        <span class="tag tag-purple">Dashboard-ready output</span>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Own Elasticities Sheet</h4>
+              <p>Per PPG: Own Price Elasticity + Promo Elasticity (LN_TPR), merged with actual volume/value shares. This is the primary output for brand-level pricing decisions.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>Cross-Price Elasticities Sheet</h4>
+              <p>For each Target PPG × Competitor PPG pair: the cross-price elasticity value. Also tags whether the competitor is "Internal" (Carlsberg brand) or "External" (competing manufacturer).</p>
+              <pre><code><span class="comment"># A PPG and competitor are Internal if same Manufacturer</span>
+Competitor Type = 'Internal' if Target_Manufacturer == Competitor_Manufacturer
+                  else 'External'</code></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>Cross-Distribution Elasticities Sheet</h4>
+              <p>Same structure as cross-price but using LN_Comp_WTD coefficients. Answers: "If a competitor gains distribution, how much does our volume fall?"</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Module 3 — Volume Transferability Algorithm</h2>
+        <span class="tag tag-green">Scenario: +10% competitor price</span>
+        <pre style="margin:12px 0;"><code><span class="comment"># For each competitor PPG (across all Carlsberg PPGs that have cross-price elasticity with it):</span>
+
+Vol_gain_percent = 0.10 × Cross_Price_Elasticity
+Vol_gain = Vol_gain_percent × PPG_Volume   <span class="comment"># absolute volume in litres</span>
+Vol_transferability = Vol_gain / sum(Vol_gain across all PPGs)   <span class="comment"># proportion</span></code></pre>
+        <p>This tells us: if competitor X raises price by 10%, what % of the volume Carlsberg gains flows to each of its PPGs?</p>
+        <div class="divider"></div>
+        <h3>Two aggregation levels:</h3>
+        <div class="grid-2">
+          <div class="mini-card">
+            <h4>Brand-Brand Transfer</h4>
+            <p>Aggregates PPG-level transfers to Brand level. Shows which Carlsberg brands gain most when each competitor brand increases price. Output: <code>Vol_Transferability(Brand).xlsx</code></p>
+          </div>
+          <div class="mini-card">
+            <h4>Internal vs External Transfer</h4>
+            <p>Splits the volume gain into <strong>Internal</strong> (Carlsberg cannibalising itself) and <strong>External</strong> (Carlsberg gaining from competition). Helps understand self-cannibalisation risk.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ GLOSSARY ══ -->
+    <div id="sec-glossary" class="section">
+      <div class="section-header">
+        <h1>Variable Glossary</h1>
+        <p>All variable names used in the model, their meanings, and expected sign/direction.</p>
+      </div>
+      <div class="card">
+        <h2>Model Variables (in RawData / Feature Eng Output)</h2>
+        <div class="glos-row"><div class="glos-var">LN_Base_Units_Price</div><div class="glos-desc">Natural log of Base Price per unit. <span class="tag tag-red">Negative elasticity expected</span> — own price effect.</div></div>
+        <div class="glos-row"><div class="glos-var">LN_WTD</div><div class="glos-desc">Natural log of smoothed Weighted Trading Distribution. <span class="tag tag-green">Positive elasticity</span> — more distribution = more sales.</div></div>
+        <div class="glos-row"><div class="glos-var">LN_TPR</div><div class="glos-desc">Natural log of (1 + TPR). TPR = (Base Price − Avg Price) / Base Price. <span class="tag tag-red">Negative elasticity</span> — bigger discount = more sales.</div></div>
+        <div class="glos-row"><div class="glos-var">SeasonalityIndex</div><div class="glos-desc">Weekly seasonality factor (ratio of week's avg volume to overall avg). Values &gt;1 = peak weeks, &lt;1 = off-peak. Sign can be positive or negative.</div></div>
+        <div class="glos-row"><div class="glos-var">Time_Trend</div><div class="glos-desc">Gradual trend variable = 1 + (Period_Number / 100). Captures secular decline or growth in category volume. Unconstrained.</div></div>
+        <div class="glos-row"><div class="glos-var">StockPiling</div><div class="glos-desc">Post-promo demand dip variable (decayed flag after discount weeks). <span class="tag tag-red">Negative elasticity</span> — consumers already stocked up.</div></div>
+        <div class="glos-row"><div class="glos-var">OOS_Ratio</div><div class="glos-desc">Out-of-stock measure = (ACV_Threshold − Transformed_WTD) / 100 when product is below threshold. <span class="tag tag-red">Negative elasticity</span> — OOS depresses sales.</div></div>
+        <div class="glos-row"><div class="glos-var">OOS_Recovery</div><div class="glos-desc">When OOS is decreasing (stock coming back). <span class="tag tag-green">Positive elasticity</span> — recovery drives sales bounce.</div></div>
+        <div class="glos-row"><div class="glos-var">Downsizing</div><div class="glos-desc">Effective pack size (ml) per unit sold. Used to capture volume impact of pack size reduction events. <span class="tag tag-green">Positive elasticity</span>.</div></div>
+        <div class="glos-row"><div class="glos-var">[Comp PPG]_LN_Average_Units_Price</div><div class="glos-desc">Log of a competitor PPG's average price. <span class="tag tag-green">Positive cross-price elasticity</span> — competitor price ↑ = our sales ↑.</div></div>
+        <div class="glos-row"><div class="glos-var">[Comp PPG]_LN_Comp_WTD</div><div class="glos-desc">Log of a competitor PPG's distribution. <span class="tag tag-red">Negative cross-distribution elasticity</span> — competitor gains distribution = our sales ↓.</div></div>
+        <div class="glos-row"><div class="glos-var">alpha</div><div class="glos-desc">Model intercept — the log of "baseline" sales (mean of Y − mean of Ŷ). Not directly interpretable as elasticity.</div></div>
+        <div class="divider"></div>
+        <h3>Event Flag Variables (0/1 binary)</h3>
+        <div class="glos-row"><div class="glos-var">BG Lucky Draw</div><div class="glos-desc">Blue Girl brand Lucky Draw promotion periods. Sign can be positive (volume uplift) or negative.</div></div>
+        <div class="glos-row"><div class="glos-var">Carlsberg Lucky Draw</div><div class="glos-desc">Carlsberg family brand Lucky Draw periods.</div></div>
+        <div class="glos-row"><div class="glos-var">CSD Lucky Draw</div><div class="glos-desc">Carlsberg Smooth Draught Lucky Draw periods.</div></div>
+        <div class="glos-row"><div class="glos-var">Heineken Lucky Draw</div><div class="glos-desc">Heineken Lucky Draw periods.</div></div>
+        <div class="glos-row"><div class="glos-var">Heineken Top Spender Promotion</div><div class="glos-desc">Heineken "Top Spender" spend-based promotional campaign.</div></div>
+        <div class="glos-row"><div class="glos-var">GWP = Gift With Purchase (bonus pack)</div><div class="glos-desc">Gift-with-purchase promotional events — shopper receives a gift with purchase.</div></div>
+        <div class="glos-row"><div class="glos-var">PWP = Purchase with Purchase (Multibuy)</div><div class="glos-desc">Multibuy / bundle deal — buy one get one, or buy X get Y type promotions.</div></div>
+      </div>
+      <div class="card">
+        <h2>Dataset Columns (Master Data / Feature Eng)</h2>
+        <table>
+          <tr><th>Column</th><th>Description</th></tr>
+          <tr><td><code>Channel</code></td><td>CVS (Convenience Stores) or SMKT (Supermarkets)</td></tr>
+          <tr><td><code>Manufacturer</code></td><td>Parent company (e.g., CARLSBERG, HEINEKEN)</td></tr>
+          <tr><td><code>Brand</code></td><td>Brand name (e.g., BLUE GIRL, CARLSBERG SMOOTH DRAUGHT)</td></tr>
+          <tr><td><code>PPG</code></td><td>Price Pack Group name (e.g., "CARLSBERG SMOOTH DRAUGHT CAN 330ML X6")</td></tr>
+          <tr><td><code>Model Flag</code></td><td>1 = this PPG is modelled; 0 = grouped into "Others"</td></tr>
+          <tr><td><code>Promo Flag</code></td><td>1 = promotional week; 0 = non-promotional week (only in "with Promo" dataset)</td></tr>
+          <tr><td><code>Total Volume</code></td><td>Sales volume in litres</td></tr>
+          <tr><td><code>Total Value</code></td><td>Sales revenue (HKD)</td></tr>
+          <tr><td><code>Total Units</code></td><td>Number of packs sold</td></tr>
+          <tr><td><code>Average Price (Unit)</code></td><td>Revenue / Units sold — blended price</td></tr>
+          <tr><td><code>Average Price (Litre)</code></td><td>Revenue / Volume in litres</td></tr>
+          <tr><td><code>Base Price</code></td><td>Derived non-promotional price (from rolling max method)</td></tr>
+          <tr><td><code>WTD</code></td><td>Weighted Trading Distribution (% of sales-weighted store coverage)</td></tr>
+          <tr><td><code>ND</code></td><td>Numeric Distribution (raw % of stores carrying the product)</td></tr>
+          <tr><td><code>Pack Type</code></td><td>CAN / BOTTLE / etc.</td></tr>
+          <tr><td><code>Pack Size</code></td><td>Volume per unit in ml (e.g., 330, 500)</td></tr>
+          <tr><td><code>Pack Count</code></td><td>Number of units in the pack (e.g., 1, 4, 6, 12)</td></tr>
+          <tr><td><code>ABV Classification</code></td><td>Alcohol by volume category (Regular / Mid-Strength / Strong / etc.)</td></tr>
+          <tr><td><code>Segment</code></td><td>Market segment (Economy / Mainstream / Premium / Super-Premium)</td></tr>
+          <tr><td><code>Beer Type</code></td><td>Lager / Stout / CSD / etc.</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ OUTPUTS GUIDE ══ -->
+    <div id="sec-outputs" class="section">
+      <div class="section-header">
+        <h1>Outputs Guide</h1>
+        <p>Every file produced by the pipeline — what it contains, who uses it, and how to interpret it.</p>
+      </div>
+      <div class="card">
+        <h2>📁 Master Data Outputs</h2>
+        <table>
+          <tr><th>File</th><th>Rows</th><th>Key Columns</th><th>Used By</th></tr>
+          <tr><td><code>Carlsberg_HK_Master Data(PPG)_with Promo.xlsx</code></td><td>PPG × Channel × Promo Flag × Week</td><td>All columns + Promo Flag</td><td>Feature Engineering (Base Price calc)</td></tr>
+          <tr><td><code>Carlsberg_HK_Master Data(PPG)_without Promo.xlsx</code></td><td>PPG × Channel × Week</td><td>All columns, promo weeks collapsed</td><td>Competition.py · Modeling.py · Feature Engineering</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>⚙️ Feature Engineering Output</h2>
+        <table>
+          <tr><th>File</th><th>Description</th></tr>
+          <tr><td><code>Carlsberg_HK_Feat Eng_XXXX_Model.xlsx</code></td><td>One row per PPG × Week × Channel. Contains all model variables: Base Price, TPR, WTD (smoothed), SeasonalityIndex, Time_Trend, StockPiling, OOS_Ratio, OOS_Recovery, Downsizing, all event flags. This is the direct input to Modeling.py (converted to RawData format via a separate prep step).</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>🏆 Competition Outputs</h2>
+        <table>
+          <tr><th>File</th><th>Sheets</th><th>Description</th></tr>
+          <tr><td><code>Comp_Mapping_final_CVS.xlsx</code></td><td>Competitor Mapping · CVS</td><td>Long-format competitor pairs + binary flags. Matrix: rows = target PPGs, cols = competitor PPGs, values = 0/1.</td></tr>
+          <tr><td><code>Comp_Mapping_final_SMKT.xlsx</code></td><td>Competitor Mapping · SMKT</td><td>Same for Supermarkets channel.</td></tr>
+          <tr><td><code>Comp_matrix_HK.xlsx</code></td><td>Combined</td><td>Merged CVS + SMKT competition matrix for use in modelling.</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>📊 Modelling Outputs</h2>
+        <table>
+          <tr><th>File / Sheet</th><th>Description</th></tr>
+          <tr><td>GDA Coefficients Excel</td><td>Final elasticity values per PPG per variable. Key columns: PPG, Variable_final, Initial_Prior_from_OLS, Final_Coefficient_from_GDA, R², MAPE, Value Share, Volume Share.</td></tr>
+          <tr><td>Base vs Incremental</td><td>Weekly sales decomposition per PPG: Actual Sales, Predicted Sales, Base Sales, Incremental Sales, Base_Actual, Incremental_Actual.</td></tr>
+          <tr><td>Predicted vs Actual</td><td>Model fit validation: actual log-sales vs predicted log-sales per week.</td></tr>
+        </table>
+        <div class="alert alert-green" style="margin-top:12px;">R² ≥ 0.70 and MAPE ≤ 30% are typical quality thresholds. PPGs below these thresholds should be investigated for data quality or structural breaks.</div>
+      </div>
+      <div class="card">
+        <h2>🔄 Volume Transferability Outputs</h2>
+        <table>
+          <tr><th>File</th><th>Sheet</th><th>Description</th></tr>
+          <tr><td><code>HK_Carlsberg_summary.xlsx</code></td><td>—</td><td>Consolidated long-format elasticity file: PPG × Variable × Elasticity. Input for all downstream analysis.</td></tr>
+          <tr><td><code>Modelling_Screens_PowerBI.xlsx</code></td><td>Own Elasticities</td><td>Own price + promo elasticity per PPG with volume/value shares. Direct Power BI input.</td></tr>
+          <tr><td><code>Modelling_Screens_PowerBI.xlsx</code></td><td>Cross Price Elasticities</td><td>PPG × Competitor cross-price elasticity with Internal/External flag.</td></tr>
+          <tr><td><code>cross_dist_elasticities.xlsx</code></td><td>—</td><td>PPG × Competitor cross-distribution elasticity.</td></tr>
+          <tr><td><code>Vol_Transferability(Brand).xlsx</code></td><td>Brand-Brand</td><td>If competitor brand raises price 10%: % volume flowing to each Carlsberg brand.</td></tr>
+          <tr><td><code>Vol_Transferability(Brand).xlsx</code></td><td>Internal-External</td><td>Internal (Carlsberg vs Carlsberg) vs External (Competitor → Carlsberg) volume transfer.</td></tr>
+          <tr><td><code>Vol_Transferability(PPG).xlsx</code></td><td>—</td><td>Same analysis at PPG level (more granular).</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>🔁 Re-Running the Pipeline</h2>
+        <div class="alert alert-amber">
+          <strong>Before running any script:</strong>
+          <ol style="margin:8px 0 0 20px; line-height:1.9;">
+            <li>Update <code>os.chdir()</code> to your local working directory path</li>
+            <li>Verify all input file paths exist and match the folder structure</li>
+            <li>Run scripts in order: Master → FE → Competition → Modeling → Vol_Transferability</li>
+            <li>Check Modeling.py: update the <code>ModelEQ.xlsx</code> path to the correct results version</li>
+            <li>Check that the <code>Channel</code> filter (CVS / SMKT) matches your run</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+  const sections = ['overview','architecture','concepts','master','features','competition','modeling','transferability','glossary','outputs'];
+  const titles = {
+    overview: 'Project Overview',
+    architecture: 'Architecture Flow',
+    concepts: 'Key Concepts',
+    master: 'Master Data (File 1)',
+    features: 'Feature Engineering (File 2)',
+    competition: 'Competition Mapping (File 3)',
+    modeling: 'Modelling — GDA (File 4)',
+    transferability: 'Volume Transferability (File 5)',
+    glossary: 'Variable Glossary',
+    outputs: 'Outputs Guide'
+  };
+
+  function show(id, el) {
+    sections.forEach(s => {
+      document.getElementById('sec-' + s).classList.remove('active');
+    });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('sec-' + id).classList.add('active');
+    el.classList.add('active');
+    document.getElementById('topbar-title').textContent = titles[id];
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+
+  function toggleConcept(header) {
+    const body = header.nextElementSibling;
+    const isOpen = header.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.concept-header').forEach(h => {
+      h.classList.remove('open');
+      h.nextElementSibling.classList.remove('open');
+    });
+    if (!isOpen) {
+      header.classList.add('open');
+      body.classList.add('open');
+    }
+  }
+</script>
+</body>
+</html>
