@@ -345,8 +345,8 @@
         <h2>🗂️ 5-File Pipeline Summary</h2>
         <div class="steps">
           <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Master_data.py — Data Preparation</h4><p>Aggregates raw SKU-level scanner data to PPG level. Creates two versions: one with Promo Flag (used for base price derivation) and one without (used for modelling and competition mapping).</p></div></div>
-          <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Feature Engineering.py — Variable Creation</h4><p>Derives all model inputs: Base Price, TPR (discount depth), WTD (distribution), Seasonality Index, Time Trend, Stockpiling, Downsizing, OOS Ratio/Recovery, and promotional event flags (Lucky Draws, GWP, PWP).</p></div></div>
-          <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Competition.py — Competitor Mapping</h4><p>For each PPG, identifies which other PPGs are "competitors" based on three rules: Beer Segment interaction, ABV Classification interaction, and Pack Size × Pack Count interaction. Outputs a binary competitor matrix.</p></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Competition.py — Competitor Mapping</h4><p>For each PPG, identifies which other PPGs are "competitors" based on three rules: Beer Segment interaction, ABV Classification interaction, and Pack Size × Pack Count interaction. Outputs a binary competitor matrix fed directly into Modeling.py.</p></div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Feature Engineering.py — Variable Creation</h4><p>Derives all model inputs: Base Price, TPR (discount depth), WTD (distribution), Seasonality Index, Time Trend, Stockpiling, Downsizing, OOS Ratio/Recovery, and promotional event flags (Lucky Draws, GWP, PWP).</p></div></div>
           <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Modeling.py — OLS → GDA Two-Step Process</h4><p><strong>Step 1 — OLS:</strong> Ordinary Least Squares is run first (unconstrained) to generate initial coefficient estimates ("priors") per PPG, stored in <code>ModelEQ.xlsx</code> (columns: <code>Prior</code>, <code>SD</code>). <br/><strong>Step 2 — GDA:</strong> Reads OLS priors from ModelEQ.xlsx and runs 100 constrained gradient descent iterations to refine them within economic bounds. Also calculates Base vs Incremental Sales.</p></div></div>
           <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Volume_Transferability.py — Post-Modelling Analysis</h4><p>Uses modelling outputs to build Power BI-ready files: own elasticities, cross-price elasticities, cross-distribution elasticities, and volume transferability matrices (brand-brand &amp; internal-external).</p></div></div>
         </div>
@@ -504,20 +504,21 @@
           <table>
             <tr><th>Script</th><th>Input Grain</th><th>Output Grain</th></tr>
             <tr><td>Master_data.py</td><td>SKU × Week</td><td>PPG × Week</td></tr>
-            <tr><td>Feature Engineering</td><td>PPG × Week</td><td>PPG × Week + Features</td></tr>
-            <tr><td>Competition.py</td><td>PPG</td><td>PPG × Competitor Matrix</td></tr>
-            <tr><td>Modeling.py</td><td>PPG × Week + Features</td><td>Elasticity per PPG + Sales decomp</td></tr>
-            <tr><td>Vol. Transferability</td><td>Elasticities + Shares</td><td>Brand/PPG transfer matrices</td></tr>
+            <tr><td>Competition.py</td><td>PPG × Channel</td><td>PPG × Competitor binary matrix</td></tr>
+            <tr><td>Feature Engineering</td><td>PPG × Week</td><td>PPG × Week + all model variables</td></tr>
+            <tr><td>Modeling.py (OLS)</td><td>FE variables + Competition matrix</td><td>ModelEQ.xlsx — variable list + OLS priors per PPG</td></tr>
+            <tr><td>Modeling.py (GDA)</td><td>ModelEQ.xlsx + RawData.xlsx</td><td>Elasticity coefficients + Base vs Incremental</td></tr>
+            <tr><td>Vol. Transferability</td><td>GDA Elasticities + Volume shares</td><td>Power BI screens + Brand/PPG transfer matrices</td></tr>
           </table>
         </div>
         <div class="card">
           <h2>⏱️ Execution Order</h2>
           <ol style="padding-left:18px; font-size:14px; line-height:2;">
-            <li><strong>Master_data.py</strong> — Always run first</li>
-            <li><strong>Feature Engineering.py</strong> — Depends on Master Data output</li>
-            <li><strong>Competition.py</strong> — Parallel to FE (only needs Master Data)</li>
-            <li><strong>Modeling.py</strong> — Needs FE output + ModelEQ file + Competition results</li>
-            <li><strong>Volume_Transferability.py</strong> — Final step, needs Modeling output</li>
+            <li><strong>Master_data.py</strong> — Always run first. Produces PPG-level scanner data.</li>
+            <li><strong>Competition.py</strong> — Run second. Uses Master Data output to build the competitor matrix (who competes with whom per PPG).</li>
+            <li><strong>Feature Engineering.py</strong> — Run third. Uses Master Data output to derive all model variables (Base Price, TPR, WTD, Seasonality, OOS, Stockpiling, etc.).</li>
+            <li><strong>Modeling.py</strong> — Run fourth. Reads both Feature Engineering output AND Competition Matrix. First runs OLS (to generate ModelEQ.xlsx with initial priors), then runs GDA (100 constrained iterations per PPG).</li>
+            <li><strong>Volume_Transferability.py</strong> — Final step. Uses GDA elasticity outputs to produce Power BI screens and volume transfer matrices.</li>
           </ol>
           <div class="alert alert-amber" style="margin-top:12px;">
             ⚠️ Each script has hardcoded file paths. Update <code>os.chdir()</code> and input/output paths before running in a new environment.
@@ -1029,46 +1030,104 @@ final_stockpiling = argmin(correlation(StockPiling_j, Total Units))</code></pre>
       </div>
 
       <div class="card" style="border-left: 4px solid #1a56db;">
-        <h2>Step 1 of 2: OLS — Generating Initial Priors</h2>
-        <span class="tag tag-blue">Runs before GDA</span>
-        <p style="margin-top:12px;">Before the custom Gradient Descent runs, an <strong>Ordinary Least Squares (OLS) regression</strong> is run for each PPG. OLS is a standard statistical regression that finds the best-fit line by minimising the sum of squared errors — with <em>no constraints</em> on the coefficient signs or magnitudes.</p>
-        <p style="margin-top:10px;">The purpose is to generate <strong>data-driven starting points</strong> (called "priors") for the GDA. Rather than starting GDA from scratch, it begins from a position that already has a rough understanding of the relationships in the data, which makes convergence faster and more reliable.</p>
+        <h2>Step 1 of 2: OLS — Variable Selection &amp; Generating Initial Priors</h2>
+        <span class="tag tag-blue">First half of Modeling.py — Sections 1–10</span>
+        <p style="margin-top:12px;">The first half of Modeling.py is entirely the OLS section. It reads two inputs — the <strong>Feature Engineering output</strong> and the <strong>Competition Matrix</strong> — and builds a clean variable list per PPG, runs OLS regression with a 4-step variable selection process, clips the resulting coefficients to economic bounds, and saves the output to <code>ModelEQ.xlsx</code> (the starting point for GDA).</p>
 
-        <div class="grid-2" style="margin-top:14px;">
-          <div class="mini-card">
-            <h4>What OLS produces</h4>
-            <ul style="padding-left:18px; font-size:13px; line-height:1.8;">
-              <li><strong>Coefficient estimate</strong> per variable → saved as <code>Prior</code> column</li>
-              <li><strong>Standard deviation</strong> of each estimate → saved as <code>SD</code> column</li>
-              <li>Stored in <code>ModelEQ.xlsx</code>, one row per PPG × Variable</li>
-            </ul>
+        <h3 style="margin-top:16px; font-size:15px; color:#1e3a5f;">Part A — Building the ModelEQ (variable list per PPG)</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Log transformations &amp; melt to long format</h4>
+              <p>All price, distribution, and TPR variables are log-transformed. The dataframe is melted from wide (one column per variable) to long (one row per PPG × Variable × Date). A key step here: <code>LN_Comp_WTD</code> is created by <strong>duplicating LN_WTD rows</strong> and renaming them — it is not a separate raw feature but a copy that represents the competitor's distribution.</p>
+              <pre><code><span class="comment"># Log transforms</span>
+df['LN_Base_Units_Price'] = np.log(df['Base Price'])
+df['LN_WTD']              = np.log(df['WTD'])
+df['LN_TPR']              = np.where(df['TPR']==0, 0, np.log(df['TPR']))
+
+<span class="comment"># LN_Comp_WTD created by duplicating LN_WTD rows</span>
+temp_comp = df[df['Variable'].str.contains('_LN_WTD')]
+temp_comp['Variable'] = temp_comp.Variable.str.replace('_LN_WTD','_LN_Comp_WTD')
+df = pd.concat([df, temp_comp])</code></pre>
+            </div>
           </div>
-          <div class="mini-card">
-            <h4>Why OLS alone is insufficient</h4>
-            <ul style="padding-left:18px; font-size:13px; line-height:1.8;">
-              <li>OLS is <strong>unconstrained</strong> — it can produce a positive own-price elasticity (economically wrong)</li>
-              <li>OLS does not handle <strong>multicollinearity</strong> between correlated promotions well</li>
-              <li>OLS cannot enforce <strong>business rules</strong> (e.g., CCF bounds on cross-elasticities)</li>
-            </ul>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>Build ModelEQ — merge Competition Matrix with FE variables</h4>
+              <p>The Competition Matrix (which PPG competes with which) is merged with the FE variable list to create one row per PPG × variable. Each row is tagged <strong>Own</strong> or <strong>Competitor</strong> based on whether the PPG name appears in the variable name. Then inappropriate variables are dropped:</p>
+              <ul style="font-size:13px; padding-left:18px; margin-top:6px; line-height:1.8;">
+                <li><strong>Own variables removed</strong>: LN_Average_Units_Price, LN_Comp_WTD (own PPG doesn't compete with itself)</li>
+                <li><strong>Competitor variables removed</strong>: LN_WTD, LN_Base_Units_Price, LN_TPR, OOS, StockPiling, SeasonalityIndex, event flags (competitors only contribute price and distribution)</li>
+              </ul>
+              <p style="margin-top:8px;">The <code>SD</code> column is set to a <strong>fixed constant of 0.01</strong> for all rows — it is not derived from OLS.</p>
+            </div>
           </div>
         </div>
 
+        <h3 style="margin-top:16px; font-size:15px; color:#1e3a5f;">Part B — 4-Step Variable Selection before running OLS</h3>
+        <p style="margin-bottom:10px;">For each PPG, variables go through four sequential filters before OLS is fit. Variables are dropped at each step if they fail the check:</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">①</div>
+            <div class="step-content">
+              <h4>Covariance Check</h4>
+              <p>Drop any variable where the absolute covariance with log(sales) is &lt; 0.001. This removes variables that have essentially zero linear relationship with the dependent variable. Exception: <code>LN_Base_Units_Price</code> is always kept even if it fails this check.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">②</div>
+            <div class="step-content">
+              <h4>Correlation with Base Price (threshold = 0.6)</h4>
+              <p>For <strong>competitor variables only</strong> (LN_Average_Units_Price, LN_Comp_WTD): drop if |Pearson correlation with own Base Price| &gt; 0.6. This prevents multicollinearity — a competitor's price that moves in lockstep with own base price cannot be identified separately.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">③</div>
+            <div class="step-content">
+              <h4>Correlation with Sales (threshold = 0.6)</h4>
+              <p>For <strong>competitor variables only</strong>: drop if |Pearson correlation with log(sales)| &gt; 0.6. If a competitor variable is already strongly correlated with sales, including it alongside own variables causes instability.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">④</div>
+            <div class="step-content">
+              <h4>Stepwise Backward Elimination (p-value threshold = 0.2)</h4>
+              <p>Run OLS with all remaining variables. Iteratively drop the variable with the highest p-value if it exceeds 0.2. Repeat until all remaining variables have p-value ≤ 0.2. This is <code>stepwise_selection()</code> using <code>statsmodels.OLS</code>.</p>
+              <pre><code>model = sm.OLS(y, sm.add_constant(X)).fit()
+pvalues = model.pvalues.iloc[1:]  # exclude intercept
+worst_pval = pvalues.max()
+if worst_pval > 0.2:
+    X.drop(pvalues.idxmax(), axis=1)  # remove worst variable
+# repeat until all p-values ≤ 0.2</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top:16px; font-size:15px; color:#1e3a5f;">Part C — OLS fit &amp; prior clipping</h3>
+        <p>After variable selection, <code>sm.OLS(Y, X).fit()</code> is run. The resulting coefficients become the <code>Prior</code> column. These are then <strong>clipped to economic bounds</strong> before saving:</p>
+        <ul style="font-size:13px; padding-left:18px; margin-top:8px; line-height:1.8;">
+          <li>StockPiling &gt; 0 → set to 0 (must be negative; post-promo dip)</li>
+          <li>SeasonalityIndex ≤ 0 → set to 0 (must be positive or zero)</li>
+          <li>Promo event variables ≤ 0 → set to 0 (Lucky Draw, GWP, PWP must be positive)</li>
+          <li>Own price, WTD, TPR, OOS, Competitor price/distribution → all clipped to their defined bounds</li>
+        </ul>
+
         <div style="margin-top:14px;">
-          <p><strong>ModelEQ.xlsx structure (OLS output):</strong></p>
+          <p><strong>Three output files saved by the OLS section:</strong></p>
           <table style="margin-top:8px;">
-            <tr><th>Column</th><th>Description</th><th>Used in GDA as</th></tr>
-            <tr><td><code>Channel</code></td><td>CVS or SMKT</td><td>Filter to run correct channel</td></tr>
-            <tr><td><code>PPG</code></td><td>PPG identifier</td><td>Loop key for GDA</td></tr>
-            <tr><td><code>Variable</code></td><td>Model variable name (e.g., LN_Base_Units_Price)</td><td>Controls which variables to include per PPG</td></tr>
-            <tr><td><code>Prior</code></td><td><strong>OLS coefficient estimate</strong></td><td>Starting coefficient value for GDA iteration 0</td></tr>
-            <tr><td><code>SD</code></td><td>Standard deviation of OLS estimate</td><td>Stored in output for reference; referenced as <code>Initial_Prior_from_OLS</code></td></tr>
+            <tr><th>File</th><th>Contents</th><th>Used by</th></tr>
+            <tr><td><code>OLS.xlsx</code></td><td>Raw OLS coefficients before clipping</td><td>Audit/reference only</td></tr>
+            <tr><td><code>ModelEQ.xlsx</code></td><td>Variable list per PPG with <code>Prior</code> (clipped OLS coeff) and <code>SD</code> (fixed = 0.01)</td><td>GDA starting point</td></tr>
+            <tr><td><code>RawData.xlsx</code></td><td>Long-format FE data (PPG × Variable × Date × Value)</td><td>GDA data matrix</td></tr>
           </table>
         </div>
 
         <div class="alert alert-blue" style="margin-top:14px;">
           <strong>Two-step modelling process:</strong><br/>
-          <strong>Step 1 — OLS</strong>: Unconstrained regression → generates <code>Prior</code> &amp; <code>SD</code> → saved to <code>ModelEQ.xlsx</code><br/>
-          <strong>Step 2 — GDA</strong>: Reads ModelEQ.xlsx, uses OLS priors as iteration-0 starting point, then runs 100 constrained gradient descent iterations to enforce economic sign &amp; magnitude bounds.
+          <strong>OLS (Sections 1–10 of Modeling.py)</strong>: Reads FE output + Competition Matrix → 4-step variable selection → OLS fit → clip priors → save ModelEQ.xlsx &amp; RawData.xlsx<br/>
+          <strong>GDA (Sections 1–7, second half of Modeling.py)</strong>: Reads ModelEQ.xlsx + RawData.xlsx → 100 constrained iterations per PPG → final elasticity coefficients labelled <code>Initial_Prior_from_OLS</code> vs <code>Final_Coefficient_from_GDA</code>
         </div>
       </div>
 
