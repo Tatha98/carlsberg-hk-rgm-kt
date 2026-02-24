@@ -947,6 +947,253 @@ final_stockpiling = argmin(correlation(StockPiling_j, Total Units))</code></pre>
           </div>
         </div>
       </div>
+      <div class="card">
+        <h2>📖 Annotated Code Walkthrough — Feature Engineering.py</h2>
+        <p style="margin-bottom:14px; color:#475569;">Every section of the code with line-by-line explanations. Read this alongside the actual <code>.py</code> file.</p>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin-bottom:8px;">Section 1 — Setup &amp; Data Load</h3>
+        <pre><code><span class="comment"># Two separate input files are needed:</span>
+<span class="comment"># df_bp — WITH Promo Flag (used for Base Price and TPR derivation only)</span>
+<span class="comment"># df    — WITHOUT Promo Flag (used for all other features and modelling)</span>
+df    = pd.read_excel(master_data_path,    sheet_name='Sheet1')
+df_bp = pd.read_excel(master_data_bp_path, sheet_name='Sheet1')
+
+<span class="comment"># Filter to Model Flag == 1 — only model the PPGs that are in scope</span>
+df    = df.loc[df["Model Flag"] == 1]
+df_bp = df_bp.loc[df_bp["Model Flag"] == 1]
+
+<span class="comment"># Safety check: print any PPG that is ALWAYS marked as promoted (Promo Flag always = 1)</span>
+<span class="comment"># These PPGs have no clean non-promo weeks → Base Price derivation will fail for them</span>
+for ppg in df_bp.PPG.unique():
+    if 0 not in df_bp[df_bp.PPG == ppg]['Promo Flag'].unique():
+        print("No non-promo weeks for:", ppg)
+
+<span class="comment"># Keep ONLY non-promo weeks for Base Price calculation</span>
+df_bp = df_bp.loc[df_bp['Promo Flag'] == 0]</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 3 — Base Price Calculation</h3>
+        <pre><code>RM_window = 8                    <span class="comment"># 8-week rolling window size</span>
+df_bp['Category'] = "HK"         <span class="comment"># grouping key needed for the rolling operation</span>
+
+<span class="comment"># ── Rolling Max 1: Trailing (backward-looking) ─────────────────────────────</span>
+<span class="comment"># For each PPG, compute the maximum average price over the previous 8 weeks</span>
+<span class="comment"># This captures the "recent ceiling" price looking backward</span>
+bp = df_bp.groupby(['Channel','Category','PPG'])['Average Price (Unit)'].apply(
+    lambda x: x.rolling(window=RM_window).max()
+)
+df_bp['Base_Units_Price1'] = bp.reset_index(level=['Channel','Category','PPG'], drop=True)
+<span class="comment"># First 7 weeks have NaN (not enough history) → fill backward from first valid value</span>
+df_bp['Base_Units_Price1'] = df_bp.groupby(
+    ['Channel','Category','PPG']).Base_Units_Price1.fillna(method='bfill')
+
+<span class="comment"># ── Rolling Max 2: Forward-shifted (forward-looking) ─────────────────────────</span>
+<span class="comment"># Shift the rolling max 7 periods back → each point shows the max of the</span>
+<span class="comment"># NEXT 8 weeks. This captures prices that "haven't happened yet" but are</span>
+<span class="comment"># the true ceiling for a planned price reduction</span>
+bp1 = df_bp.groupby(['Channel','Category','PPG'])['Average Price (Unit)'].apply(
+    lambda x: x.rolling(window=RM_window).max().shift(-(RM_window - 1))
+)
+df_bp['Base_Units_Price2'] = bp1.reset_index(level=['Channel','Category','PPG'], drop=True)
+<span class="comment"># Last 7 weeks have NaN → fill forward from last valid value</span>
+df_bp['Base_Units_Price2'] = df_bp.groupby(
+    ['Channel','Category','PPG']).Base_Units_Price2.fillna(method='ffill')
+
+<span class="comment"># ── Take the MINIMUM of both rolling maxes ──────────────────────────────────</span>
+<span class="comment"># Using the min of backward & forward max gives a conservative, stable</span>
+<span class="comment"># "ceiling price" — it doesn't spike just because of one high week nearby</span>
+df_bp['Base_Units_Price_8WR'] = df_bp['Base_Units_Price2']
+df_bp.loc[df_bp['Base_Units_Price1'] &lt; df_bp['Base_Units_Price2'],
+          'Base_Units_Price_8WR'] = df_bp['Base_Units_Price1']
+
+<span class="comment"># ── Smoothing Pass 1: Cap sudden upward jumps ──────────────────────────────</span>
+for i in range(1, len(bp)):
+    <span class="comment"># If the rolling max jumped UP compared to the previous point AND</span>
+    <span class="comment"># is also above the actual avg price this week → it's an artificial spike</span>
+    if (bp[i] > bp_n[i-1]) and (bp[i] > ap[i]):
+        bp_n[i] = max(bp_n[i-1], ap[i])   <span class="comment"># cap it to the larger of: previous base or current avg</span>
+
+<span class="comment"># ── Smoothing Pass 2a: Remove isolated spikes and dips ──────────────────────</span>
+for i in range(1, len(df_bp_temp) - 1):
+    <span class="comment"># If point i is HIGHER than both its neighbours → isolated spike → replace with previous</span>
+    if (df_bp_temp.loc[i-1,'Base_Units_Price_8WRS'] &lt; df_bp_temp.loc[i,'Base_Units_Price_8WRS'] and
+        df_bp_temp.loc[i+1,'Base_Units_Price_8WRS'] &lt; df_bp_temp.loc[i,'Base_Units_Price_8WRS']):
+        df_bp_temp.loc[i,'Base_Units_Price_8WRS2'] = df_bp_temp.loc[i-1,'Base_Units_Price_8WRS2']
+    <span class="comment"># If point i is LOWER than both its neighbours → isolated dip → replace with previous</span>
+    elif (df_bp_temp.loc[i-1,'Base_Units_Price_8WRS'] > df_bp_temp.loc[i,'Base_Units_Price_8WRS'] and
+          df_bp_temp.loc[i+1,'Base_Units_Price_8WRS'] > df_bp_temp.loc[i,'Base_Units_Price_8WRS']):
+        df_bp_temp.loc[i,'Base_Units_Price_8WRS2'] = df_bp_temp.loc[i-1,'Base_Units_Price_8WRS2']
+
+    <span class="comment"># Flatten tiny price movements ≤ 1% — not a real price change, just noise</span>
+    change = (df_bp_temp.loc[i,'Base_Units_Price_8WRS2'] -
+              df_bp_temp.loc[i-1,'Base_Units_Price_8WRS2']) * 100 / df_bp_temp.loc[i-1,'Base_Units_Price_8WRS2']
+    if -1 &lt;= change &lt;= 1:
+        df_bp_temp.loc[i,'Base_Units_Price_8WRS2'] = df_bp_temp.loc[i-1,'Base_Units_Price_8WRS2']
+
+<span class="comment"># ── Final constraint: Base Price must always ≥ Average Price ────────────────</span>
+<span class="comment"># By definition base price is the "undiscounted" reference — it cannot be below avg price</span>
+df_bp.loc[df_bp['Average Price (Unit)'] > df_bp['Base_Units_Price_8WRS2'],
+          'Base_Units_Price_8WRS2'] = df_bp['Average Price (Unit)']
+df_bp.rename(columns={'Base_Units_Price_8WRS2': 'Base Price'}, inplace=True)</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 4 — TPR (Temporary Price Reduction)</h3>
+        <pre><code><span class="comment"># TPR = how deep is the current discount from the Base Price?</span>
+<span class="comment"># Formula: 1 − (Current Avg Price / Base Price)</span>
+<span class="comment"># Example: Base Price = 10, Avg Price = 8.5  →  TPR = 0.15  (15% discount)</span>
+df_bp['TPR'] = df_bp.apply(
+    lambda x: 0 if x['Base Price'] == 0
+              else (1 - (x['Average Price (Unit)'] / x['Base Price'])), axis=1
+)
+
+<span class="comment"># Apply 5% threshold — discounts below 5% are noise, not real promotions</span>
+discount_threshold = 0.05
+df_bp['TPR'] = df_bp['TPR'].apply(lambda x: 0 if x &lt; discount_threshold else x)
+
+<span class="comment"># Also zero out TPR if volume in that week is below the 8-week rolling mean</span>
+<span class="comment"># Rationale: a "discount" week with below-average volume is likely not a real promo</span>
+<span class="comment"># (could be a stocking issue or data artifact)</span>
+df_bp['8 weeks rolling mean'] = df_bp['Total Units'].rolling(window=8).mean().fillna(0)
+df_bp['TPR'] = df_bp.apply(
+    lambda x: 1 if x['Total Units'] &lt; x['8 weeks rolling mean'] else x['TPR'], axis=1
+)</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 5 — Downsizing</h3>
+        <pre><code><span class="comment"># Detect if the effective pack size of a PPG has changed over time</span>
+<span class="comment"># e.g. 330ml can → 320ml can at same price = effective price increase</span>
+<span class="comment"># Calculate actual ml per unit from volume and unit count</span>
+temp["Downsizing"] = (df_bp["Total Volume"] * 1000) / df_bp["Total Units"]   <span class="comment"># litres → ml per unit</span>
+temp["Downsizing"] = round(temp["Downsizing"], 0)                             <span class="comment"># round to whole ml</span>
+
+<span class="comment"># If the measured pack size is within 2% of the nominal Pack Size → no downsizing</span>
+<span class="comment"># (small measurement error, treat as same pack)</span>
+temp["Downsizing"] = np.where(
+    abs((temp['Downsizing'] - temp['Pack Size']) / temp['Pack Size']) &lt;= 0.02,
+    temp['Pack Size'],    <span class="comment"># within 2% tolerance → use nominal pack size (no change)</span>
+    temp['Downsizing']    <span class="comment"># outside tolerance → keep measured value (downsizing detected)</span>
+)</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 7 — Seasonality Index</h3>
+        <pre><code><span class="comment"># Group by Channel and Week-of-year, sum volume across all PPGs</span>
+<span class="comment"># This gives total category volume for each week number (1–52)</span>
+SI_Level    = ['Category', 'Channel', 'Week']
+SI_AVG_Level = ['Category', 'Channel']
+SeasonalityIndex = df.groupby(SI_Level)['Total Volume'].sum().reset_index()
+
+<span class="comment"># Calculate the overall average weekly volume (across all 52 weeks)</span>
+SI_AvgSales = SeasonalityIndex.groupby(SI_AVG_Level)['Total Volume'].mean().reset_index()
+SI_AvgSales['TotalAvgVolume'] = SI_AvgSales['Total Volume'].round(2)
+
+<span class="comment"># Seasonality Index = this week's volume / overall average</span>
+<span class="comment"># &gt; 1.0 = above-average week (e.g. summer, CNY), &lt; 1.0 = below-average week</span>
+SeasonalityIndex = SeasonalityIndex.merge(SI_AvgSales, on=SI_AVG_Level, how='left')
+SeasonalityIndex['SeasonalityIndex'] = (
+    SeasonalityIndex['Total Volume'] / SeasonalityIndex['TotalAvgVolume']
+).round(2)
+
+<span class="comment"># Apply Savitzky-Golay filter: smooths the curve while preserving peaks/troughs</span>
+<span class="comment"># window_length=15 (looks at 15 weeks), polyorder=3 (fits a cubic polynomial locally)</span>
+<span class="comment"># Better than a moving average because it doesn't flatten seasonal peaks</span>
+temp['SeasonalityIndex'] = savgol_filter(temp['SeasonalityIndex'],
+                                          window_length=15, polyorder=3)</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 8 — Time Trend</h3>
+        <pre><code><span class="comment"># Assign a sequential period number to each unique week in the dataset</span>
+<span class="comment"># Week 1 = earliest date, Week N = latest date</span>
+timepd = df[['Date','Year','Month','Week']].drop_duplicates()
+timepd.insert(0, 'Period_Number', range(1, 1 + len(timepd)))
+
+<span class="comment"># Time_Trend = 1 + (Period_Number / 100)</span>
+<span class="comment"># This starts near 1.0 and rises ~0.01 per week</span>
+<span class="comment"># Purpose: captures long-run secular trends (category growing/shrinking over time)</span>
+<span class="comment"># In the log-log model, a coefficient of +0.5 on Time_Trend means</span>
+<span class="comment"># roughly +0.5% volume growth per week from long-term trend alone</span>
+df = pd.merge(df, timepd, how='left', on=['Date','Month','Year','Week'])
+df['Time_Trend'] = df['Period_Number'] / 100 + 1</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 9 — Stockpiling (Post-Promo Demand Dip)</h3>
+        <pre><code><span class="comment"># Stockpiling: consumers buy extra during a promo and buy less in the</span>
+<span class="comment"># 1-3 weeks after. This depresses future sales after a promo ends.</span>
+
+tpr_threshold     = 0.95      <span class="comment"># TPR ratio ≥ 0.95 means no meaningful discount — StockUp = 0</span>
+stockpiling_weeks = 3         <span class="comment"># effect lasts up to 3 weeks after promo</span>
+
+<span class="comment"># Step 1: Mark the WEEK AFTER a promo week as StockUp = 1</span>
+df['StockUp'] = 0.0
+df.loc[df['TPR'] >= tpr_threshold, 'StockUp'] = 1.0
+<span class="comment"># Shift StockUp by 1 week — the dip happens the week AFTER the discount</span>
+StockUp = df.groupby('key').StockUp.apply(lambda x: x.rolling(1).mean().shift(1))
+df['StockUp'] = StockUp
+<span class="comment"># Clear StockUp on weeks that are themselves also promo weeks</span>
+df.loc[(df['StockUp'] > 0) &amp; (df['TPR'] >= tpr_threshold), 'StockUp'] = 0.0
+
+<span class="comment"># Step 2: Try 4 different decay rates: 5%, 10%, 15%, 20%</span>
+<span class="comment"># For each decay rate j, compute how much demand was "stolen" k weeks ago:</span>
+<span class="comment"># StockPiling_j at (t+k) = StockUp(t) × (1 - j)^(k+1)</span>
+<span class="comment"># Higher decay = demand recovers faster after the promo</span>
+for j in [0.05, 0.10, 0.15, 0.20]:
+    for i in range(0, stockpiling_weeks):               <span class="comment"># i = 0,1,2 → 1,2,3 weeks after promo</span>
+        decay = (1 - j) ** (i + 1)                      <span class="comment"># exponential decay: e.g. 0.95^1, 0.95^2, 0.95^3</span>
+        df['StockUp_' + str(i)] = df['StockUp'] * decay
+        <span class="comment"># Shift this lag i+1 weeks into the future</span>
+        df['StockUp_' + str(i)] = df.groupby('key')['StockUp_' + str(i)].apply(
+            lambda x: x.rolling(1).mean().shift(i + 1)
+        )
+    <span class="comment"># Take the max across the 3 lag periods → single stockpiling effect per week</span>
+    df['StockPiling' + str(round(j,2))] = df[['StockUp','StockUp_0','StockUp_1','StockUp_2']].max(axis=1)
+
+<span class="comment"># Step 3: Auto-select the decay rate with the MOST NEGATIVE correlation with actual sales</span>
+<span class="comment"># Stockpiling should suppress sales → we want the version most negatively correlated</span>
+stockpiling_corr = temp.groupby('key').corr()[['Total Units']]
+stockpiling_corr['final'] = stockpiling_corr[stockpiling_columns].idxmin(axis=1)  <span class="comment"># most negative</span>
+
+<span class="comment"># Assign the best decay rate's stockpiling values as the final StockPiling feature</span>
+df['StockPiling'] = 0.0
+for decay_col in df['final'].unique():
+    df.loc[df['final'] == decay_col, 'StockPiling'] = df[decay_col]</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 10 — OOS (Out of Stock)</h3>
+        <pre><code><span class="comment"># ── Step 1: Create TransformedWTD ────────────────────────────────────────────</span>
+<span class="comment"># WTD is inflated during promo weeks (more stores stock the product).</span>
+<span class="comment"># We want the "true" underlying distribution — not the promo-inflated one.</span>
+<span class="comment"># Strategy: where promo weeks push WTD higher than the non-promo baseline, replace with baseline</span>
+
+<span class="comment"># Mark non-promo weeks (week_type=0) and promo weeks (week_type=1)</span>
+df['week_type'] = np.where(df['TPR'] &lt;= tpr_threshold, 1.0, 0.0)
+
+<span class="comment"># Handle consecutive 12+ promo weeks: if a PPG is always on promo for 12+ weeks,</span>
+<span class="comment"># treat those weeks as "non-promo" for distribution baseline (avoid data gaps)</span>
+temp_df['after_12wk_week_type'] = temp_df['week_type'].mul(
+    temp_df.groupby(temp_df['week_type'].diff().ne(0).cumsum())['week_type']
+    .transform('size').lt(12)
+)
+
+<span class="comment"># Fill in non-promo WTD for all weeks → forward/backward fill to cover promo weeks</span>
+temp_df.loc[temp_df['after_12wk_week_type'] == 0.0, 'wtd_nopromo'] = temp_df['WTD']
+temp_df['wtd_nopromo'] = temp_df.wtd_nopromo.fillna(method='bfill').fillna(method='ffill')
+df_oos['TransformedWTD'] = df_oos['WTD']   <span class="comment"># start with actual WTD, then override</span>
+
+<span class="comment"># ── Step 2: ACV Threshold = 30th percentile of TransformedWTD ───────────────</span>
+<span class="comment"># During stable distribution periods (ACV Reach sign = 1),</span>
+<span class="comment"># compute the 30th percentile WTD. This is the "normal minimum distribution".</span>
+<span class="comment"># If current WTD drops below this → product is Out of Stock.</span>
+df['Change in ACV Reach'] = df.groupby(['Channel','PPG'])['TransformedWTD'].pct_change().fillna(0)
+<span class="comment"># ACV Reach sign = 1 means stable (change &lt; 3%), = 0 means significant change</span>
+df['ACV Reach sign'] = np.where(df['Change in ACV Reach'].abs() >= 0.03, 0, 1)
+df['ACV_Threshold'] = df.groupby(
+    ['Channel','PPG', df['ACV Reach sign'].diff().ne(0).cumsum()]
+)['TransformedWTD'].transform(lambda x: x.quantile(0.3))   <span class="comment"># 30th percentile per stable segment</span>
+
+<span class="comment"># ── Step 3: Compute OOS_Ratio and OOS_Recovery ──────────────────────────────</span>
+<span class="comment"># OOS = how much distribution is MISSING below the normal baseline</span>
+<span class="comment"># = max(0, ACV_Threshold − TransformedWTD)  →  capped at 0 if no stock-out</span>
+df['OOS'] = np.maximum(0, df['ACV_Threshold'] - df['TransformedWTD'])
+df['OOS_Ratio'] = df['OOS'] / 100   <span class="comment"># scale to a 0–1 range</span>
+
+<span class="comment"># OOS_Recovery = week-on-week improvement in OOS (OOS ratio going down = stock recovering)</span>
+<span class="comment"># Use the negative of the change → positive value means stock is coming back</span>
+df['OOS_Recovery'] = df.groupby(['Channel','PPG'])['OOS_Ratio'].diff()
+df.loc[df['OOS_Recovery'] >= 0, 'OOS_Recovery'] = 0.0   <span class="comment"># only keep negative changes (recovery)</span>
+df['OOS_Recovery'] = df['OOS_Recovery'] * (-1)            <span class="comment"># flip sign → positive = recovering</span></code></pre>
+      </div>
     </div>
 
     <!-- ══ COMPETITION ══ -->
@@ -1248,6 +1495,319 @@ New_Prior = min(UL − (UL − Prior)/2, Prior + |Prior| × step × error/|error
             <p>Average absolute percentage error of predictions. Target: MAPE ≤ 25–30%. Lower is better.</p>
           </div>
         </div>
+      <div class="card">
+        <h2>📖 Annotated Code Walkthrough — Modeling.py (OLS Section)</h2>
+        <p style="margin-bottom:14px; color:#475569;">Sections 1–10 of Modeling.py — the full OLS pipeline with detailed line-by-line explanations.</p>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin-bottom:8px;">Sections 3–4 — Log Transform &amp; Build ModelEQ</h3>
+        <pre><code><span class="comment"># Log-transform price/distribution/TPR variables</span>
+<span class="comment"># Why? The model is log-log: log(Volume) = β × log(Price)</span>
+<span class="comment"># This makes β directly interpretable as an elasticity</span>
+df['LN_Base_Units_Price']    = np.where(df['Base Price'] == 0, 0, np.log(df['Base Price']))
+df['LN_Average_Units_Price'] = np.where(df['Average Price (Unit)'] == 0, 0, np.log(df['Average Price (Unit)']))
+df['LN_Units']               = np.where(df['Total Units'] == 0, 0, np.log(df['Total Units']))
+df['LN_WTD']                 = np.where(df['WTD'] == 0, 0, np.log(df['WTD']))
+df['LN_TPR']                 = np.where(df['TPR'] == 0, 0, np.log(df['TPR']))
+
+<span class="comment"># Melt from wide to long format</span>
+<span class="comment"># Before: one column per variable (LN_WTD, LN_Base_Units_Price, ...)</span>
+<span class="comment"># After:  one row per PPG × Date × Variable, with a 'Value' column</span>
+<span class="comment"># This long format is required for the pivot/join operations in GDA</span>
+df = df.melt(
+    id_vars=['Channel', 'Date', 'PPG', 'Manufacturer', 'Brand'],
+    value_vars=['LN_WTD', 'LN_Base_Units_Price', 'LN_TPR', 'SeasonalityIndex',
+                'StockPiling', 'LN_Units', ...],
+    var_name='Variable', value_name='Value'
+)
+
+<span class="comment"># SUBGROUP1: label each row as Dependent (sales) or Independent (driver variable)</span>
+df['SUBGROUP1'] = 'Independent'
+df.loc[df['Variable'] == 'LN_Units', 'SUBGROUP1'] = 'Dependent'
+
+<span class="comment"># Create LN_Comp_WTD for competitor distribution impact</span>
+<span class="comment"># It is NOT a separate input feature — it is a copy of LN_WTD rows with a renamed variable</span>
+<span class="comment"># e.g. "CARLSBERG 320ML_LN_WTD" → "CARLSBERG 320ML_LN_Comp_WTD"</span>
+<span class="comment"># This allows each OTHER PPG's distribution to appear as a competitor variable</span>
+temp_comp = df[df['Variable'].str.contains('_LN_WTD')].copy()
+temp_comp['Variable'] = temp_comp['Variable'].str.replace('_LN_WTD', '_LN_Comp_WTD')
+df = pd.concat([df, temp_comp])                         <span class="comment"># doubles the WTD rows under new name</span></code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 6 — Build ModelEQ (variable list per PPG)</h3>
+        <pre><code><span class="comment"># Merge Competition Matrix with FE variable list</span>
+<span class="comment"># Competition Matrix (new): rows = target PPGs, columns = competitor PPGs, value = 0/1</span>
+<span class="comment"># After melting, it gives pairs: (Target PPG, Competitor PPG) where flag=1</span>
+<span class="comment"># Merging with temp_df (independent variable list) gives one row per PPG × variable</span>
+ModelEQ = new.merge(temp_df, on=['Channel', 'Value'], how='left')
+
+<span class="comment"># Tag each row: does the variable "belong" to this PPG (Own) or a competitor?</span>
+<span class="comment"># Own variable example:  "CARLSBERG 320ML_LN_Base_Units_Price"  — PPG name is IN the variable name</span>
+<span class="comment"># Competitor variable:    "HEINEKEN 330ML_LN_Average_Units_Price" — different PPG name</span>
+ModelEQ['Remove'] = 'Competitor'
+ModelEQ['Temp'] = ModelEQ['PPG'] + "_"
+ModelEQ.loc[ModelEQ.apply(lambda x: x['Temp'] in x['Variable'], axis=1), 'Remove'] = 'Own'
+
+<span class="comment"># Remove variables that don't belong on each side:</span>
+<span class="comment"># OWN PPG should NOT have: competitor price, competitor distribution</span>
+own_variables_Remove = ['LN_Average_Units_Price', 'LN_Comp_WTD', ...]
+<span class="comment"># COMPETITOR should NOT have: own price, own WTD, TPR, OOS, Stockpiling, event flags</span>
+<span class="comment"># (competitors only contribute cross-price and cross-distribution elasticities)</span>
+comp_variables_Remove = ['LN_WTD', 'LN_Base_Units_Price', 'LN_TPR', 'OOS_Ratio', ...]
+
+<span class="comment"># SD column = fixed constant 0.01 for ALL variables</span>
+<span class="comment"># This is NOT the OLS standard error — it's a fixed regularization parameter</span>
+ModelEQ['SD'] = 1 / (10**2)    <span class="comment"># = 0.01</span></code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 8 — Running OLS (with 4-step variable selection)</h3>
+        <pre><code>for ret in ModelEQ['Channel'].unique():       <span class="comment"># loop over CVS and SMKT separately</span>
+    for i in ModelEQ_temp['PPG'].unique():    <span class="comment"># loop over every PPG in that channel</span>
+
+        <span class="comment"># Build Y (dependent) and X (independent) matrices for this PPG</span>
+        Y = RawData_temp[(RawData_temp['PPG'] == i) &amp; (RawData_temp['SUBGROUP1'] == 'Dependent')]
+        X = RawData_temp[RawData_temp['Variable'].isin(variables_for_this_ppg)]
+        X = X.pivot(index='Date', columns='Variable', values='Value')  <span class="comment"># long → wide</span>
+
+        <span class="comment"># ── Filter 1: Covariance Check ──────────────────────────────────────────</span>
+        <span class="comment"># Drop variables with near-zero covariance with log(sales) — they carry no signal</span>
+        cov_FE = FE1.cov()[['Value']]
+        vars_eliminated = [v for v in cov_FE.index if abs(cov_FE.loc[v,'Value']) &lt;= 0.001]
+        <span class="comment"># Always preserve LN_Base_Units_Price even if it fails the covariance check</span>
+        for x in vars_eliminated:
+            if 'LN_Base_Units_Price' in x:
+                vars_with_cov.append(x)
+
+        <span class="comment"># ── Filter 2: Competitor correlation with Base Price (threshold = 0.6) ──</span>
+        <span class="comment"># A competitor's price that moves in lockstep with own base price</span>
+        <span class="comment"># cannot be separately identified in the regression (multicollinearity)</span>
+        for comp_var in comp_cols:
+            corr = abs(X[ppg + '_LN_Base_Units_Price'].corr(X[comp_var]))
+            if corr &lt;= 0.6:
+                keep.append(comp_var)    <span class="comment"># low correlation → safe to include</span>
+
+        <span class="comment"># ── Filter 3: Competitor correlation with Sales (threshold = 0.6) ───────</span>
+        <span class="comment"># A competitor variable already highly correlated with sales would</span>
+        <span class="comment"># "steal" explanatory power from own variables and destabilize the model</span>
+        for comp_var in comp_cols:
+            corr = abs(Y.corr(X[comp_var]))
+            if corr &lt;= 0.6:
+                keep.append(comp_var)
+
+        <span class="comment"># ── Filter 4: Stepwise Backward Elimination (p-value threshold = 0.2) ───</span>
+        <span class="comment"># Run OLS iteratively. Each round: check all p-values.</span>
+        <span class="comment"># If the worst p-value exceeds 0.2 → that variable is statistically insignificant → drop it</span>
+        <span class="comment"># Repeat until ALL remaining variables have p-value ≤ 0.2</span>
+        model = sm.OLS(y, sm.add_constant(X)).fit()
+        pvalues = model.pvalues.iloc[1:]               <span class="comment"># exclude intercept</span>
+        while pvalues.max() > 0.2:
+            worst_feature = pvalues.idxmax()
+            X.drop(columns=[worst_feature], inplace=True)   <span class="comment"># drop the weakest variable</span>
+            model = sm.OLS(y, sm.add_constant(X)).fit()     <span class="comment"># refit without it</span>
+            pvalues = model.pvalues.iloc[1:]
+
+        <span class="comment"># ── Final OLS fit ──────────────────────────────────────────────────────</span>
+        X_final = sm.add_constant(X)
+        ols = sm.OLS(Y, X_final).fit()
+        Comp_Matrix = ols.params             <span class="comment"># regression coefficients (one per variable)</span>
+        dict = Comp_Matrix.to_dict()
+        del dict['const']                    <span class="comment"># drop the intercept — GDA handles it separately</span>
+        <span class="comment"># Each PPG's coefficients → added to ModelEQ as 'Prior' column</span>
+        coefficient = pd.DataFrame(list(dict.items()), columns=['Variable','Prior'])</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Section 9 — Fixing Prior Directions &amp; Saving</h3>
+        <pre><code><span class="comment"># OLS is unconstrained — it can produce economically wrong signs</span>
+<span class="comment"># Before saving to ModelEQ.xlsx, clip all priors to economically valid ranges:</span>
+
+<span class="comment"># Own Price: must be negative (higher price → less volume)</span>
+ModelEQ.loc[(ModelEQ['Remove']=='Own') &amp; (ModelEQ['Variable'].str.contains('LN_Base_Units_Price'))
+             &amp; (ModelEQ['Prior'] &gt; -0.5), 'Prior'] = -0.5           <span class="comment"># cap at -0.5 if OLS gave a weakly negative value</span>
+
+<span class="comment"># Competitor Price: must be positive (competitor price rises → our volume gain)</span>
+ModelEQ.loc[(ModelEQ['Remove']=='Competitor') &amp; (ModelEQ['Variable'].str.contains('LN_Average_Units_Price'))
+             &amp; (ModelEQ['Prior'] &gt; average_price[1]), 'Prior'] = average_price[1]   <span class="comment"># max = 1.0</span>
+ModelEQ.loc[(ModelEQ['Remove']=='Competitor') &amp; (ModelEQ['Variable'].str.contains('LN_Average_Units_Price'))
+             &amp; (ModelEQ['Prior'] &lt; average_price[0]), 'Prior'] = average_price[0]   <span class="comment"># min = 0.01</span>
+
+<span class="comment"># StockPiling: must be ≤ 0 (post-promo dip should suppress sales)</span>
+ModelEQ.loc[(ModelEQ['Variable'].str.contains('StockPiling')) &amp; (ModelEQ['Prior'] &gt; 0), 'Prior'] = 0
+
+<span class="comment"># Seasonality: must be ≥ 0 (seasonal index ≥ 1 → positive coefficient)</span>
+ModelEQ.loc[(ModelEQ['Variable'].str.contains('SeasonalityIndex')) &amp; (ModelEQ['Prior'] &lt;= 0), 'Prior'] = 0
+
+<span class="comment"># Promo event flags (Lucky Draw, GWP, PWP): must be positive (events lift sales)</span>
+for var in promo_var:
+    ModelEQ.loc[(ModelEQ['Variable'].str.contains(var)) &amp; (ModelEQ['Prior'] &lt;= 0), 'Prior'] = 0
+
+<span class="comment"># Save three output files:</span>
+coeff.to_excel(OLS, index=False)       <span class="comment"># raw OLS coefficients before clipping — for audit</span>
+ModelEQ.to_excel(Model, index=False)   <span class="comment"># clipped priors — THIS is what GDA reads as starting point</span>
+RawData.to_excel(Raw_Data, index=False)<span class="comment"># full long-format FE data — THIS is what GDA uses as X/Y matrices</span></code></pre>
+      </div>
+
+      <div class="card">
+        <h2>📖 Annotated Code Walkthrough — Modeling.py (GDA Section)</h2>
+        <p style="margin-bottom:14px; color:#475569;">The second half of Modeling.py — the Gradient Descent Algorithm with detailed annotations.</p>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin-bottom:8px;">Section 5 — Prepare ModelEQ for GDA</h3>
+        <pre><code><span class="comment"># Filter to one channel at a time (run CVS first, then SMKT separately)</span>
+ModelEq = ModelEq.loc[ModelEq['Channel'] == "CVS"]
+RawData = RawData.loc[RawData['Channel'] == "CVS"]
+
+<span class="comment"># Add channel prefix to PPG and Variable names for unique identification</span>
+<span class="comment"># e.g. "CARLSBERG 320ML" → "CVS|CARLSBERG 320ML"</span>
+ModelEq['PPG_Combined']      = ModelEq['Channel'] + '|' + ModelEq['PPG']
+ModelEq['Variable_Combined'] = ModelEq['Channel'] + '|' + ModelEq['Variable']
+
+<span class="comment"># Competition Coefficient Factor: scales cross-price elasticity upper bounds</span>
+<span class="comment"># based on the competitor's relative volume share</span>
+<span class="comment"># Bigger competitor → can have larger impact on your PPG → higher upper bound allowed</span>
+ModelEq['competition_coeff_factor'] = (
+    ModelEq['comp_ppg_sum'] / (ModelEq['comp_ppg_sum'] + ModelEq['modelled_ppg_sum'])
+)</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;"><code>createdata()</code> — Build X and Y matrices per PPG</h3>
+        <pre><code>def createdata(RawData, ModelEq, ppgnumber):
+    <span class="comment"># Y = log(actual sales units) time series for this PPG — the target variable</span>
+    Y = RawData.loc[(RawData['PPG'] == ppgnumber) &amp; (RawData['SUBGROUP1'] == 'Dependent')]
+    Y = Y[['Value','Date']].set_index('Date')    <span class="comment"># indexed by date for alignment</span>
+
+    <span class="comment"># X = wide matrix of all independent variables for this PPG</span>
+    <span class="comment"># Each column = one variable (LN_Base_Units_Price, LN_WTD, competitor vars, etc.)</span>
+    <span class="comment"># Each row = one week</span>
+    newlist = ModelEq.loc[ModelEq['PPG'] == ppgnumber]       <span class="comment"># get this PPG's variable list</span>
+    X = RawData.loc[RawData['Variable'].isin(newlist['Variable'].unique())]
+    X = X.pivot_table(index='Date', columns='Variable', values='Value')  <span class="comment"># long → wide</span>
+
+    <span class="comment"># Missing variable values filled with 0 (e.g. no promo event = 0, no competitor data = 0)</span>
+    df = X.join(Y).dropna(subset=['Value']).fillna(0)
+
+    <span class="comment"># priorsdata: Variable + Prior (OLS-derived starting coefficients)</span>
+    priorsdata = newlist[['Variable','Prior']]
+    <span class="comment"># sddata: Variable + SD (fixed = 0.01 for all — not used in the gradient update itself)</span>
+    sddata = newlist[['Variable','SD']]
+    return Y, X, SalesOutput, newlist, priorsdata, sddata, df</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;"><code>calculating_alpha()</code> — Compute intercept each iteration</h3>
+        <pre><code>def calculating_alpha(X, Y, priors_dict):
+    <span class="comment"># Compute predicted log-sales using current coefficient values</span>
+    X['Predicted'] = 0
+    for column in X.columns[:-1]:           <span class="comment"># exclude 'Predicted' column itself</span>
+        X['Predicted'] += X[column] * priors_dict[column]
+
+    <span class="comment"># Intercept α = mean(actual) − mean(predicted)</span>
+    <span class="comment"># This ensures the model is "centered" — predicted mean = actual mean</span>
+    <span class="comment"># Without this, the model could be systematically above or below actual sales</span>
+    mu_intercept = np.nanmean(Y) - np.nanmean(X['Predicted'])
+    return mu_intercept, X</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;"><code>ComputeErrorandCorrelation()</code> — Backward pass</h3>
+        <pre><code>def ComputeErrorandCorrelation(trace, X, priorsdata):
+    <span class="comment"># Compute error in ORIGINAL units (not log-units)</span>
+    <span class="comment"># Why exp()? Because the model is log-log: exp(log_actual) = actual units</span>
+    X['error'] = np.exp(X['Actual']) - np.exp(X['Predicted'])
+
+    <span class="comment"># Pearson correlation of each X variable with the error term</span>
+    <span class="comment"># Positive correlation → variable moves with error → coefficient should be increased</span>
+    <span class="comment"># Negative correlation → variable moves against error → coefficient should be decreased</span>
+    corr = X.corr(method='pearson')[['error']]
+    corr = corr.drop(['error','Predicted','Actual'])   <span class="comment"># keep only X variable correlations</span>
+    return temp, X   <span class="comment"># temp has Prior + error correlation per variable</span></code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;"><code>AdjustandUpdatePriors()</code> — Constrained gradient step</h3>
+        <pre><code>def AdjustandUpdatePriors(temp, priorsdata, newlist, itr, ...):
+    max_step = 0.15   <span class="comment"># maximum fraction to move the coefficient in one iteration</span>
+
+    <span class="comment"># ── Slowdown factor: prevents oscillation ─────────────────────────────────</span>
+    <span class="comment"># Start at 2.0 for first 4 iterations (conservative step size)</span>
+    <span class="comment"># If a variable's correlation sign flips between 3 consecutive iterations</span>
+    <span class="comment"># (oscillating: +/-/+) → multiply slowdown by 1.2 to dampen the movement</span>
+    if itr &lt; 4:
+        newlist['Slow_down_factor'] = 2.0
+    if itr >= 4:
+        <span class="comment"># detect sign oscillation in correlation across last 3 iterations</span>
+        newlist.loc[
+            (newlist['Correlation'+str(itr-1)] &gt; 0) &amp;
+            (newlist['Correlation'+str(itr-2)] &lt; 0) &amp;
+            (newlist['Correlation'+str(itr-3)] &gt; 0),
+            'Slow_down_factor'
+        ] *= 1.2
+
+    <span class="comment"># ── Step size formula ──────────────────────────────────────────────────────</span>
+    <span class="comment"># step = min(max_step, |error| / Slow_down_factor)</span>
+    <span class="comment"># Limits how far we move the coefficient — large errors move it more</span>
+    step = np.minimum(max_step, abs(temp['error']) / temp['Slow_down_factor'])
+
+    <span class="comment"># ── Update rule for BOUNDED variables (e.g. own price, bounded to [−4.0, −0.01]) ──</span>
+    <span class="comment"># If error &lt; 0 (predicted too high): push coefficient toward lower bound</span>
+    <span class="comment">#   New = Prior + max((LL − Prior)/2, |Prior| × step × direction)</span>
+    <span class="comment">#   The (LL - Prior)/2 term ensures we never overshoot the lower bound</span>
+    temp.loc[(temp['Prior'] &lt; 0) &amp; (temp['error'] &lt; 0) &amp;
+             (temp['Variable'].str.contains('LN_Base_Units_Price')), 'New Prior'] = (
+        temp['Prior'] + np.maximum(
+            (base_price[0] - temp['Prior']) / 2,     <span class="comment"># half-step toward lower bound</span>
+            abs(temp['Prior']) * step * temp['error'] / abs(temp['error'])
+        )
+    )
+    <span class="comment"># If error &gt; 0 (predicted too low): push coefficient toward upper bound</span>
+    <span class="comment">#   New = min(UL − (UL − Prior)/2, Prior + |Prior| × step × direction)</span>
+    temp.loc[(temp['Prior'] &lt; 0) &amp; (temp['error'] &gt; 0) &amp;
+             (temp['Variable'].str.contains('LN_Base_Units_Price')), 'New Prior'] = np.minimum(
+        base_price[1] - (base_price[1] - temp['Prior']) / 2,   <span class="comment"># half-step toward upper bound</span>
+        temp['Prior'] + abs(temp['Prior']) * step * temp['error'] / abs(temp['error'])
+    )
+
+    <span class="comment"># ── Update rule for UNBOUNDED variables (Seasonality, Stockpiling) ────────</span>
+    <span class="comment"># New = Prior + |Prior| × min(max_step, error²) × error/|error|</span>
+    <span class="comment"># The error² term makes updates larger when errors are large and smaller when errors are small</span>
+    temp.loc[~(is_bounded_variable), 'New Prior'] = (
+        temp['Prior'] + abs(temp['Prior']) *
+        np.minimum(max_step, temp['error']**2) *
+        temp['error'] / abs(temp['error'])
+    )
+
+    <span class="comment"># ── Pruning at iterations 15, 45, 70 ──────────────────────────────────────</span>
+    <span class="comment"># Variables with near-zero coefficients at these checkpoints are dropped (set to 0)</span>
+    <span class="comment"># Prevents overfitting — weak variables should not be kept just because they started non-zero</span>
+    if itr in [15, 45, 70]:
+        temp.loc[(temp['Variable'].str.contains('LN_Average_Units_Price')) &amp;
+                 (temp['Prior'] &lt; 0.005), 'Prior'] = 0.0
+        temp.loc[(temp['Variable'].str.contains('SeasonalityIndex')) &amp;
+                 (temp['Prior'] &lt; 0.005), 'Prior'] = 0.0</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;"><code>calculateBaseline()</code> — Base vs Incremental decomposition</h3>
+        <pre><code>def calculateBaseline(coefficients, sales, RawData, ppgnumber):
+    <span class="comment"># Base variables = everything EXCEPT promotional variables</span>
+    <span class="comment"># Promotions (TPR, Lucky Draws, GWP, PWP) are "incremental" by definition</span>
+    matching = [v for v in variables if (
+        'LN_TPR' not in v and 'Lucky Draw' not in v and
+        'GWP' not in v and 'PWP' not in v
+    )]   <span class="comment"># keeps: own price, WTD, Seasonality, Trend, OOS, Stockpiling, competitor vars</span>
+
+    <span class="comment"># Reconstruct predicted sales using ONLY base variables + final GDA coefficients</span>
+    X['Base Sales'] = new_dict['alpha']                   <span class="comment"># start with intercept</span>
+    for column in X.columns:
+        X['Base Sales'] += X[column] * new_dict[column]  <span class="comment"># add each base variable contribution</span>
+
+    <span class="comment"># Convert from log-space to actual units</span>
+    sales['Base Sales']        = np.exp(sales['Base Sales'])
+    sales['Predicted Sales']   = np.exp(sales['Predicted Sales'])
+    sales['Incremental Sales'] = sales['Predicted Sales'] - sales['Base Sales']
+
+    <span class="comment"># Apply the same incremental % to actual (observed) sales</span>
+    <span class="comment"># This avoids attributing model error to incremental vs base split</span>
+    sales['perc_inc']         = sales['Incremental Sales'] / sales['Predicted Sales']
+    sales['Incremental_Actual'] = sales['perc_inc'] * sales['Actual Sales']
+    sales['Base_Actual']        = sales['Actual Sales'] - sales['Incremental_Actual']</code></pre>
+
+        <h3 style="font-size:15px; color:#1e3a5f; margin:16px 0 8px;">Final Output Column Names</h3>
+        <table>
+          <tr><th>Column</th><th>Meaning</th></tr>
+          <tr><td><code>Initial_Prior_from_OLS</code></td><td>The starting coefficient value (OLS output, what GDA began with)</td></tr>
+          <tr><td><code>Final_Coefficient_from_GDA</code></td><td>The final elasticity after 100 GDA iterations — this is the model result</td></tr>
+          <tr><td><code>Priors for iteration0</code></td><td>Same as Initial_Prior_from_OLS — the iteration-0 coefficient</td></tr>
+          <tr><td><code>Coefficients_Iteration99</code></td><td>Same as Final_Coefficient_from_GDA — the iteration-99 coefficient</td></tr>
+          <tr><td><code>Rsq</code></td><td>R² on final iteration — proportion of variance explained</td></tr>
+          <tr><td><code>MAPE</code></td><td>Mean Absolute Percentage Error on final iteration</td></tr>
+          <tr><td><code>competition_coeff_factor</code></td><td>Volume-weighted upper bound multiplier for cross-price elasticity</td></tr>
+        </table>
       </div>
     </div>
 
